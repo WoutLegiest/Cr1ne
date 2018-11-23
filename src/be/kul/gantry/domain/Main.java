@@ -1,6 +1,5 @@
 package be.kul.gantry.domain;
 
-
 import org.json.simple.parser.ParseException;
 import java.io.IOException;
 
