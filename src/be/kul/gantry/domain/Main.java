@@ -7,8 +7,8 @@ public class Main {
 
     public static void main(String[] args) throws IOException, ParseException {
 
-        String inputFileName = "./1_10_100_4_FALSE_65_50_50.json";
-        String outputFileName = "output.csv";
+        String inputFileName = args[0];
+        String outputFileName = args[1];
 
         /*Stellen een mogelijke oplossing op
           Lezen de json file in en bouwen de kade op
