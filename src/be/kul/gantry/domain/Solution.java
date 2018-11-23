@@ -249,7 +249,7 @@ public class Solution {
 
             //Execute the move from the pickup location to the place location
             executeMoveJob(problem.getOutputSlot(),j);
-
+            pickupSlot.setItem(null);
         }
     }
 
