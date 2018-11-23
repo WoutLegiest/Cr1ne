@@ -148,6 +148,7 @@ public class Solution {
 
             //Execute the move from the pickup location to the place location
             executeMoveJob(problem.getOutputSlot(), j);
+            pickupSlot.setItem(null);
 
         }
     }
@@ -179,8 +180,6 @@ public class Solution {
      * @param @Job j
      * */
     public void executeMoveJob(Slot toFillSlot, Job j){
-        //calculate delivery time (moving from input slot to free slot
-        timeToAdd = calculateGantryMoveTime(toFillSlot, gantryInput);
         //calculate delivery time (moving from input slot to free slot
         timeToAdd = calculateGantryMoveTime(toFillSlot, gantryInput);
         updateClock(clock, timeToAdd);
