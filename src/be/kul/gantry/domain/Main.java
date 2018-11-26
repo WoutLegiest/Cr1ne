@@ -16,10 +16,12 @@ public class Main {
         Solution solution = new Solution(inputFileName);
 
         //Afhandelen van de inputjobs
-        solution.handleInputJobs();
+        //solution.handleInputJobs();
 
         //Afhandelen van de outputjobs
-        solution.handleOutputJobs();
+        //solution.handleOutputJobs();
+
+        solution.executionWithDoubleGantry();
 
         //Wegschrijven naar de outputfile
         solution.writeOutput(outputFileName);

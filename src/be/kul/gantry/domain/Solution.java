@@ -22,27 +22,25 @@ public class Solution {
     private Gantry gantryOutput;
     private SlotStructure slotStructure;
 
+    private double temporaryClock = 0;
+
     private int pickupLevel;
 
     /**
      * Constructor, create problem from Json file, setup gantries, setup free slot Queue.
+     *
      * @param inputFileName
      */
     public Solution(String inputFileName) throws IOException, ParseException {
         //Reading the information from the jason file
         try {
-            problem = Problem.fromJson(new File("./1_10_100_4_TRUE_65_50_50.json"));
+            problem = Problem.fromJson(new File("./2_10_100_4_TRUE_65_50_50.json"));
         } catch (IOException e) {
             e.printStackTrace();
         } catch (ParseException e) {
             e.printStackTrace();
         }
 
-        //Setup gantries
-        gantryInput = problem.getGantries().get(0);
-        if (problem.getGantries().size() == 2) {
-            gantryOutput = problem.getGantries().get(1);
-        }
 
         //Create new slot structure
         slotStructure = new SlotStructure();
@@ -53,12 +51,12 @@ public class Solution {
         for (Slot s : problem.getSlots()) {
             //create key by coordinate
             slotCoordinate = String.valueOf(s.getCenterX()) + "," + String.valueOf(s.getCenterY()) + "," + String.valueOf(s.getZ());
-            System.out.print(slotCoordinate);
+            //System.out.print(slotCoordinate);
             if (s.getItem() == null) {
                 tempFreeSlots.add(s);
             }
             //Calculate gantry move time between input and current slot (usable for optimalization)
-            s.setPickupTime(calculateSlotInputMoveTime(gantryInput, s));
+            //s.setPickupTime(calculateSlotInputMoveTime(gantryInput, s));
             slotStructure.getSlotStructureMap().put(slotCoordinate, s);
 
             //add slot to possible parent as a child
@@ -71,59 +69,104 @@ public class Solution {
         //Remove input slot from the queue (bug in file reader)
         freeSlots.getFreeSlots().remove();
 
+        //Setup gantries
+        gantryInput = problem.getGantries().get(0);
+        if (problem.getGantries().size() == 2) {
+            gantryOutput = problem.getGantries().get(1);
+            System.out.println("Two gantries Detected");
+
+        }
+
+
         //add start position of gantry to output
         performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
+        performedActions.add(new Output(gantryOutput.getId(), clock, gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), -1));
 
 
+    }
+
+
+    public void executionWithDoubleGantry() {
+        int i = 0;
+        int k = 0;
+        while (true) {
+            if (i < problem.getInputJobSequence().size()) {
+                handleInputJobs(problem.getInputJobSequence().get(i));
+                i++;
+            }if (k < problem.getOutputJobSequence().size()) {
+                Job j = problem.getOutputJobSequence().get(k);
+                if(j.getItem().getSlot() != null){
+                    handleOutputJobs(j);
+                    k++;
+                }
+
+            }else{
+                break;
+            }
+        }
     }
 
     /**
      * Function which goes through the input job sequence
      */
-    public void handleInputJobs() {
-        for (Job j : problem.getInputJobSequence()) {
+    public void handleInputJobs(Job j) {
+        //for (Job j : problem.getInputJobSequence()) {
 
 
-            //Eerst de kraan klaarzetten om de job te doen
-            executeGantryMove(j);
-
-            //Get free slot
-            Slot freeSlotTemp;
-            Slot toFillSlot = null;
-            String slotCoordinate = "";
-
-            boolean goodSlot = false;
-            while (!goodSlot) {
-
-                freeSlotTemp = freeSlots.getFreeSlots().remove();
-
-                //map toFillSlot object to object from hashMap
-                slotCoordinate = String.valueOf(freeSlotTemp.getCenterX()) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ());
-
-                if(checkUnderneath(freeSlotTemp)){
-                    break;
-                }
-
-                freeSlots.addSlot(freeSlotTemp);
-            }
-            toFillSlot = slotStructure.getSlotStructureMap().get(slotCoordinate);
-
-            toFillSlot.setItem(j.getItem());  //add item to slot
-            j.getItem().setSlot(toFillSlot);  //add slot to item
-
-            executeMoveJob(toFillSlot,j);
+        //check if gantry move is safe, if not move output crane
+        if (!gantryMoveIsSafe(gantryInput, problem.getInputSlot())) {
+            executeGantryMove(new Job(0, null, null, problem.getOutputSlot()), gantryOutput);
+            // add wait time to output
+            performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
 
         }
+
+        performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
+        executeGantryMove(j, gantryInput);
+
+        //Get free slot
+        Slot freeSlotTemp;
+        Slot toFillSlot;
+        String slotCoordinate;
+
+
+        while (true) {
+
+            freeSlotTemp = freeSlots.getFreeSlots().remove();
+
+            //map toFillSlot object to object from hashMap
+            slotCoordinate = String.valueOf(freeSlotTemp.getCenterX()) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ());
+
+            if (checkUnderneath(freeSlotTemp)) {
+                break;
+            }
+
+            freeSlots.addSlot(freeSlotTemp);
+        }
+        toFillSlot = slotStructure.getSlotStructureMap().get(slotCoordinate);
+
+        toFillSlot.setItem(j.getItem());  //add item to slot
+        j.getItem().setSlot(toFillSlot);  //add slot to item
+
+        if (!gantryMoveIsSafe(gantryInput, toFillSlot)) {
+            executeGantryMove(new Job(0, null, slotStructure.getSlotStructureMap().get(gantryInput.getCurrentSlot()), problem.getOutputSlot()), gantryOutput);
+            //add wait time to output
+            performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), j.getItem().getId()));
+
+        }
+        executeMoveJob(toFillSlot, j, gantryInput);
+
+        //}
     }
 
-    public boolean checkUnderneath(Slot freeSlotTemp){
-        String slotCoordinateUnderLeft = String.valueOf(freeSlotTemp.getCenterX() - 5) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ()-1);
-        String slotCoordinateUnderRight = String.valueOf(freeSlotTemp.getCenterX() + 5) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ()-1);
+    public boolean checkUnderneath(Slot freeSlotTemp) {
+        String slotCoordinateUnderLeft = String.valueOf(freeSlotTemp.getCenterX() - 5) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ() - 1);
+        String slotCoordinateUnderRight = String.valueOf(freeSlotTemp.getCenterX() + 5) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ() - 1);
 
         Slot underLeft = slotStructure.getSlotStructureMap().get(slotCoordinateUnderLeft);
         Slot underRight = slotStructure.getSlotStructureMap().get(slotCoordinateUnderRight);
 
-        if(underLeft != null && underRight != null) {
+        if (underLeft != null && underRight != null) {
             if (underLeft.getItem() != null && underRight.getItem() != null) {
                 return true;
             }
@@ -138,10 +181,12 @@ public class Solution {
     public void performInput(Job j) {
 
 
-
         //Eerst de kraan klaarzetten om de job te doen
-
-        executeGantryMove(j);
+        if (!gantryMoveIsSafe(gantryOutput, j.getPickup().getSlot())) {
+            executeGantryMove(new Job(0, null, null, problem.getInputSlot()), gantryOutput);
+            performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
+        }
+        executeGantryMove(j, gantryOutput);
 
         //Get free slot
         Slot freeSlotTemp;
@@ -166,7 +211,7 @@ public class Solution {
             if (freeSlotTemp.getCenterY() == j.getPickup().getSlot().getCenterY()) {
                 if (freeSlotTemp.getCenterX() < minX && freeSlotTemp.getCenterX() > maxX) {
                     //Check if the slot has two filled underlying slots.
-                    if(checkUnderneath(freeSlotTemp)){
+                    if (checkUnderneath(freeSlotTemp)) {
                         break;
                     }
 
@@ -174,7 +219,7 @@ public class Solution {
             }
             //If slots has a different Y coordinate, no range check is needed
             else if (freeSlotTemp.getCenterY() != j.getPickup().getSlot().getCenterY()) {
-                if(checkUnderneath(freeSlotTemp)){
+                if (checkUnderneath(freeSlotTemp)) {
                     break;
                 }
             }
@@ -188,35 +233,86 @@ public class Solution {
         j.getItem().setSlot(freeSlotTemp);  //add slot to item
 
         //Execute the move from the pickup location to the place location
-        executeMoveJob(freeSlotTemp,j);
+        if (!gantryMoveIsSafe(gantryOutput, freeSlotTemp)) {
+            executeGantryMove(new Job(0, null, null, problem.getInputSlot()), gantryInput);
+            performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
+        }
+        executeMoveJob(freeSlotTemp, j, gantryOutput);
 
     }
 
-    public void executeGantryMove(Job j){
-        //calculate pickup time (moving gantry from current position to input slot)
-        timeToAdd = calculateGantryMoveTime(j.getPickup().getSlot(), gantryInput);
-        updateClock(clock, timeToAdd);
-        /*set new gantry coordinates*/
-        gantrySetCoordinates(gantryInput, j.getPickup().getSlot());
-        /*action performed: adding to output*/
-        performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
-        updateClock(clock, problem.getPickupPlaceDuration());
-        performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), j.getItem().getId()));
+    public boolean gantryMoveIsSafe(Gantry gantry, Slot toGoSlot) {
+        //get coordinates of the other crane
+        int currentXOtherCrane;
+        if (gantry.getId() == 0) {
+            //if the current crane is the input crane, get coordinates of the output crane
+            currentXOtherCrane = gantryOutput.getCurrentX();
+            if (toGoSlot.getCenterX() > currentXOtherCrane) {
+                System.out.println(clock + " || input would cross output");
+                return false;
+                //the pickup location is beyond the output crane its x value.
+            }
+            // SO the input crane should go over the output crane, which is not possible
+        } else {
+            currentXOtherCrane = gantryInput.getCurrentX();
+            if (toGoSlot.getCenterX() < currentXOtherCrane) {
+                System.out.println(clock + " || output would cross input");
+                return false;
+            }
+        }
+        if (abs(toGoSlot.getCenterX() - currentXOtherCrane) < 20) {
+            //If the absolute value of the difference between the x value of the pickup
+            // and the x value of the other crane is smaller than 20, the move is not safe
+            return false;
+        } else {
+            return true;
+        }
 
     }
 
-    public void executeMoveJob(Slot toFillSlot, Job j){
+    public void executeGantryMove(Job j, Gantry gantry) {
+        if(j.getPickup().getSlot() != null ){
+            //calculate pickup time (moving gantry from current position to input slot)
+            timeToAdd = calculateGantryMoveTime(j.getPickup().getSlot(), gantry);
+
+            updateClock(clock, timeToAdd);
+            /*set new gantry coordinates*/
+            gantrySetCoordinates(gantry, j.getPickup().getSlot());
+            gantry.setCurrentSlot(j.getPickup().getSlot());
+            /*action performed: adding to output*/
+            performedActions.add(new Output(gantry.getId(), clock, gantry.getCurrentX(), gantry.getCurrentY(), -1));
+
+        }
+
+        if (j.getItem() != null) {
+            updateClock(clock, problem.getPickupPlaceDuration());
+            performedActions.add(new Output(gantry.getId(), clock, gantry.getCurrentX(), gantry.getCurrentY(), j.getItem().getId()));
+        }
+
+        if(j.getPickup().getSlot() == null){
+            timeToAdd = calculateGantryMoveTime(j.getPlace().getSlot(), gantry);
+            updateClock(clock, timeToAdd);
+            System.out.println("CLOCK:" + clock);
+            gantrySetCoordinates(gantry, j.getPlace().getSlot());
+            gantry.setCurrentSlot(j.getPlace().getSlot());
+            /*action performed: adding to output*/
+            performedActions.add(new Output(gantry.getId(), clock, gantry.getCurrentX(), gantry.getCurrentY(), -1));
+        }
+
+
+    }
+
+    public void executeMoveJob(Slot toFillSlot, Job j, Gantry gantry) {
         //calculate delivery time (moving from input slot to free slot
-        timeToAdd = calculateGantryMoveTime(toFillSlot, gantryInput);
-        //calculate delivery time (moving from input slot to free slot
-        timeToAdd = calculateGantryMoveTime(toFillSlot, gantryInput);
+        timeToAdd = calculateGantryMoveTime(toFillSlot, gantry);
         updateClock(clock, timeToAdd);
         //set new gantry coordinates
-        gantrySetCoordinates(gantryInput, j.getItem().getSlot());  //new references between slot and item are both ways, so we can reference the slot via the item
+        gantrySetCoordinates(gantry, j.getItem().getSlot());  //new references between slot and item are both ways, so we can reference the slot via the item
         //action performed; adding to output
-        performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), j.getItem().getId()));
+        gantry.setCurrentSlot(toFillSlot);
+        performedActions.add(new Output(gantry.getId(), clock, gantry.getCurrentX(), gantry.getCurrentY(), j.getItem().getId()));
         updateClock(clock, problem.getPickupPlaceDuration());
-        performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
+        performedActions.add(new Output(gantry.getId(), clock, gantry.getCurrentX(), gantry.getCurrentY(), -1));
 
     }
 
@@ -225,12 +321,14 @@ public class Solution {
      * Deze methode handelt een output job af, het zal dus een item uitgraven als boven hem en dan naar de output plaats
      * brengen
      */
-    public void handleOutputJobs() {
-        for (Job j : problem.getOutputJobSequence()) {
-            // First, get item and find slot from item
-            Item i = problem.getItems().get(j.getItem().getId());
-            //System.out.println(i.getId());
-            Slot pickupSlot = i.getSlot();
+    public void handleOutputJobs(Job j) {
+        //for (Job j : problem.getOutputJobSequence()) {
+        // First, get item and find slot from item
+        Item i = problem.getItems().get(j.getItem().getId());
+        //System.out.println(i.getId());
+
+        Slot pickupSlot = i.getSlot();
+        if(pickupSlot != null){
             pickupLevel = pickupSlot.getZ();
             // Second recursively look for any children and reallocate them
             if (pickupSlot.getItem() != null) {
@@ -242,15 +340,26 @@ public class Solution {
             j.getPickup().setSlot(pickupSlot);
 
             //All children are dug out, move the gantry again
-            executeGantryMove(j);
+            if (!gantryMoveIsSafe(gantryOutput, j.getPickup().getSlot())) {
+                executeGantryMove(new Job(0, null, null, problem.getInputSlot()), gantryInput);
+                performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
+            }
+            performedActions.add(new Output(gantryOutput.getId(), clock, gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), -1));
+            executeGantryMove(j, gantryOutput);
 
             //Assign output slot to the item
             i.setSlot(problem.getOutputSlot());
 
             //Execute the move from the pickup location to the place location
-            executeMoveJob(problem.getOutputSlot(),j);
+            if (!gantryMoveIsSafe(gantryOutput, problem.getOutputSlot())) {
+                executeGantryMove(new Job(0, null, null, problem.getOutputSlot()), gantryInput);
+                performedActions.add(new Output(gantryInput.getId(), clock, gantryInput.getCurrentX(), gantryInput.getCurrentY(), j.getItem().getId()));
+            }
+            executeMoveJob(problem.getOutputSlot(), j, gantryOutput);
             pickupSlot.setItem(null);
         }
+
+        //}
     }
 
     /**
@@ -315,6 +424,7 @@ public class Solution {
         }
     }
 
+
     /**
      * Function which calculates the minimal time required to move an item from the input slot to the given slot.
      */
@@ -358,6 +468,7 @@ public class Solution {
 
     /**
      * Function which converts all output objects into a .csv file
+     *
      * @param outputFileName
      */
     public void writeOutput(String outputFileName) throws IOException {
