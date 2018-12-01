@@ -10,9 +10,9 @@ public class Main {
         String inputFileName = args[0];
         String outputFileName = args[1];
 
-        /*Stellen een mogelijke oplossing op
-          Lezen de json file in en bouwen de kade op
-        */
+        //Stellen een mogelijke oplossing op
+        // Lezen de json file in en bouwen de kade op
+
         Solution solution = new Solution(inputFileName);
 
         //Afhandelen van de inputjobs
