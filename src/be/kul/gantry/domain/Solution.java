@@ -9,6 +9,7 @@ import java.util.*;
 
 import static java.lang.Math.abs;
 
+@SuppressWarnings("Duplicates")
 public class Solution {
 
     private double clock = 0;
@@ -22,11 +23,16 @@ public class Solution {
 
     private int pickupLevel;
 
+    static boolean crossed = true;
+
     /**
      * Constructor, create problem from Json file, setup gantries, setup free slot Queue.
      * @param inputFileName Name of the inputfile
      */
     Solution(String inputFileName) {
+
+        String[] inputFile = inputFileName.split("_");
+        crossed = Boolean.parseBoolean(inputFile[4]);
 
         //Reading the information from the jason file
         try {
@@ -48,6 +54,7 @@ public class Solution {
         //Adding all the slots to the HashMap
         String slotCoordinate;
         List<Slot> tempFreeSlots = new ArrayList<>();
+
         for (Slot s : problem.getSlots()) {
 
             //create key by coordinate
@@ -63,7 +70,10 @@ public class Solution {
             slotStructure.getSlotStructureMap().put(slotCoordinate, s);
 
             //add slot to possible parent as a child
-            slotStructure.setChild(s);
+            if(crossed)
+                slotStructure.setChildCrossed(s);
+            else
+                slotStructure.setChildStacked(s);
         }
 
         //Create new freeSlots object
@@ -80,7 +90,7 @@ public class Solution {
     /**
      * Function which goes through the input job sequence
      */
-    void handleInputJobs() {
+    void handleInputJobsCrossed() {
 
         //Alle inputJobs are been handeld
         for (Job j : problem.getInputJobSequence()) {
@@ -121,6 +131,47 @@ public class Solution {
     }
 
     /**
+     * Methode for the stacked version of the problem
+     */
+    public void handleInputJobsStacked() {
+
+        for (Job j : problem.getInputJobSequence()) {
+
+            //Move the gantry to the pickup location
+            executeGantryMove(j);
+
+            //Initialize variables to find free slot
+            Slot freeSlotTemp = null;
+            String slotCoordinate = "";
+
+            //Setup loop
+            boolean goodSlot = false;
+            while(!goodSlot){
+                //Get slot from the queue
+                freeSlotTemp = freeSlots.getFreeSlots().remove();
+
+                //Check if place slot is not the same as the pickup slot
+                if(freeSlotTemp.getCenterX() != j.getPickup().getSlot().getCenterX()
+                        && freeSlotTemp.getCenterY() != j.getPickup().getSlot().getCenterY()){
+                    goodSlot = true;
+                }
+
+                //If slot is not correct, add to the queue
+                freeSlots.addSlot(freeSlotTemp);
+            }
+
+            System.out.println("Graken uit de while");
+
+            //Set both references
+            freeSlotTemp.setItem(j.getItem());  //add item to slot
+            j.getItem().setSlot(freeSlotTemp);  //add slot to item
+
+            //Execute the move from the pickup location to the place location
+            executeMoveJob(freeSlotTemp, j);
+        }
+    }
+
+    /**
      * This method checks if there are items under the slot
      *
      * @param freeSlotTemp The to check slot
@@ -129,15 +180,15 @@ public class Solution {
     private boolean checkUnderneath(Slot freeSlotTemp){
 
         String slotCoordinateUnderLeft = String.valueOf(freeSlotTemp.getCenterX() - 5) + ","
-                + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ()-1);
+                + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ() - 1);
         String slotCoordinateUnderRight = String.valueOf(freeSlotTemp.getCenterX() + 5) + ","
-                + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ()-1);
+                + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ() - 1);
 
         Slot underLeft = slotStructure.getSlotStructureMap().get(slotCoordinateUnderLeft);
         Slot underRight = slotStructure.getSlotStructureMap().get(slotCoordinateUnderRight);
 
         //TODO: Verduidelijking, mag toch ook op de grond ?
-        if(underLeft != null && underRight != null)
+        if (underLeft != null && underRight != null)
             return underLeft.getItem() != null && underRight.getItem() != null;
 
         return false;
@@ -212,8 +263,23 @@ public class Solution {
 
             // Second recursively look for any children and reallocate them
             //Print it also out
-            if (pickupSlot.getItem() != null)
-                digSlotOut(pickupSlot);
+
+            if(crossed){
+                if (pickupSlot.getItem() != null)
+                    digSlotOutCrossed(pickupSlot);
+            }
+            else{
+                System.out.println("Juiste digout");
+                if (pickupSlot.getItem() != null && pickupSlot.getChildLeft() != null) {
+                    if (pickupSlot.getChildLeft().getItem() != null) {
+                        System.out.println("Recursie");
+                        digSlotOutStacked(pickupSlot.getChildLeft());
+                    }
+
+                }
+            }
+
+            System.out.println("Na digOut");
 
             //Set the pickup slot, needed for the executeGantryMove function
             j.getPickup().setSlot(pickupSlot);
@@ -233,22 +299,43 @@ public class Solution {
     /**
      * Resurive methode die een effectief een item zal uitgraven
      */
-    private void digSlotOut(Slot s) {
+    private void digSlotOutCrossed(Slot s) {
 
         if (s.getChildLeft() != null)
             if (s.getChildLeft().getItem() != null)
-                digSlotOut(s.getChildLeft());
+                digSlotOutCrossed(s.getChildLeft());
 
         //Every move can be seen as an input job but with a different start slot.
 
         if (s.getChildRight() != null)
             if (s.getChildRight().getItem() != null)
-                digSlotOut(s.getChildRight());
+                digSlotOutCrossed(s.getChildRight());
 
         if (s.getZ() != pickupLevel) {
-            performInput(new Job(s.getId(), problem.getItems().get(s.getItem().getId()), s, null));
+            performInputCrossed(new Job(s.getId(), problem.getItems().get(s.getItem().getId()), s, null));
             s.setItem(null);
         }
+
+    }
+
+    /**
+     * Recursive method that will dig out a slot
+     * @param s the to dig out slot
+     */
+    private void digSlotOutStacked(Slot s) {
+
+        if (s.getChildLeft() != null) {
+            if (s.getChildLeft().getItem() != null){
+                System.out.println("Recursie voor ");
+                digSlotOutStacked(s.getChildLeft());
+            }
+
+
+        }
+
+        //Every move can be seen as an input job but with a different start slot.
+        performInputStacked(new Job(s.getId(), problem.getItems().get(s.getItem().getId()), s, null));
+        s.setItem(null);
 
     }
 
@@ -256,7 +343,7 @@ public class Solution {
      * Function which executes the input job
      * Beweging van een item van in de kade(of van in de input)  naar een andere plaats in de kade
      */
-    private void performInput(Job j) {
+    private void performInputCrossed(Job j) {
 
         //Eerst de kraan klaarzetten om de job te doen
         executeGantryMove(j);
@@ -296,6 +383,8 @@ public class Solution {
 
             //If slot is not feasible, add to the queue again and rerun the loop
             freeSlots.addSlot(freeSlotTemp);
+
+            System.out.println("Lus lus");
         }
 
         //Loop ended, assign the slot to the item and vice versa
@@ -304,6 +393,39 @@ public class Solution {
 
         //Execute the move from the pickup location to the place location
         executeMoveJob(freeSlotTemp,j);
+
+    }
+
+    private void performInputStacked(Job j) {
+
+        //Move the gantry to the pickup location
+        executeGantryMove(j);
+
+        //Initialize variables to find free slot
+        Slot freeSlotTemp = null;
+        String slotCoordinate = "";
+
+        //Setup loop
+        boolean goodSlot = false;
+        while(!goodSlot){
+            //Get slot from the queue
+            freeSlotTemp = freeSlots.getFreeSlots().remove();
+
+            //Check if place slot is not the same as the pickup slot
+            if(freeSlotTemp.getCenterX() != j.getPickup().getSlot().getCenterX() && freeSlotTemp.getCenterY() != j.getPickup().getSlot().getCenterY()){
+                goodSlot = true;
+            }
+
+            //If slot is not correct, add to the queue
+            freeSlots.addSlot(freeSlotTemp);
+        }
+
+        //Set both references
+        freeSlotTemp.setItem(j.getItem());  //add item to slot
+        j.getItem().setSlot(freeSlotTemp);  //add slot to item
+
+        //Execute the move from the pickup location to the place location
+        executeMoveJob(freeSlotTemp, j);
 
     }
 
@@ -403,7 +525,6 @@ public class Solution {
         fw.close();
     }
 
-
     //Getters and setters
     public double getClock() {
         return clock;
@@ -413,4 +534,11 @@ public class Solution {
         this.clock = clock;
     }
 
+    public static boolean isCrossed() {
+        return crossed;
+    }
+
+    public static void setCrossed(boolean crossed) {
+        Solution.crossed = crossed;
+    }
 }

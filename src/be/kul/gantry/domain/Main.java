@@ -16,11 +16,19 @@ public class Main {
         Solution solution = new Solution(inputFileName);
 
         //Afhandelen van de inputjobs
-        solution.handleInputJobs();
+        if(Solution.isCrossed())
+            solution.handleInputJobsCrossed();
+        else{
+            System.out.println("Begin aan de input");
+            solution.handleInputJobsStacked();
+        }
 
+
+        System.out.println("Beginnen aan output");
         //Afhandelen van de outputjobs
         solution.handleOutputJobs();
 
+        System.out.println("Beginnen aan het uitschrijven");
         //Wegschrijven naar de outputfile
         solution.writeOutput(outputFileName);
 

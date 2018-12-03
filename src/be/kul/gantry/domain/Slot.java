@@ -13,7 +13,6 @@ public class Slot {
     //Toegevoegd
     private double pickupTime = 0;
     private Slot childLeft, childRight;
-    //private Slot child;
 
     public Slot(int id, int centerX, int centerY, int xMin, int xMax, int yMin, int yMax, int z, SlotType type, Item item) {
         this.id = id;
@@ -96,14 +95,6 @@ public class Slot {
     public void setPickupTime(double pickupTime) {
         this.pickupTime = pickupTime;
     }
-
-    /*public Slot getChild() {
-        return child;
-    }
-
-    public void setChild(Slot child) {
-        this.child = child;
-    }*/
 
     public Slot getChildLeft() {
         return childLeft;
