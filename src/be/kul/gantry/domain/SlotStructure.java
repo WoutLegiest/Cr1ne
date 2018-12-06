@@ -11,7 +11,7 @@ public class SlotStructure {
     public SlotStructure() {
     }
 
-    public void setChild(Slot s){
+    public void setChildCrossed(Slot s){
         String parentLeftCoordinate = String.valueOf(s.getCenterX()-5) + "," + String.valueOf(s.getCenterY()) + "," + String.valueOf(s.getZ()-1);
         String parentRightCoordinate = String.valueOf(s.getCenterX()+5) + "," + String.valueOf(s.getCenterY()) + "," + String.valueOf(s.getZ()-1);
 
@@ -24,6 +24,12 @@ public class SlotStructure {
         if(parentRight != null){
             parentRight.setChildLeft(s);
         }
+    }
+
+    public void setChildStacked(Slot s){
+        String parentCoordinate = String.valueOf(s.getCenterX()) + "," + String.valueOf(s.getCenterY()) + "," + String.valueOf(s.getZ()-1);
+        Slot parent = slotStructureMap.get(parentCoordinate);
+        if(parent != null) parent.setChild(s);
     }
 
     public Map<String, Slot> getSlotStructureMap() {
