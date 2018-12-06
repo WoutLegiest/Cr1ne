@@ -50,38 +50,12 @@ public class Solution {
             stacked = true;
         }
 
-        //Setup gantries
-        gantryInput = problem.getGantries().get(0);
-        if (problem.getGantries().size() == 2) {
-            gantryOutput = problem.getGantries().get(1);
-        }
+        setupGantries();
 
         //Create new slot structure
         slotStructure = new SlotStructure();
 
-
-        //Adding all the slots to the HashMap
-        String slotCoordinate;
-        for (Slot s : problem.getSlots()) {
-            //create key by coordinate
-            slotCoordinate = String.valueOf(s.getCenterX()) + "," + String.valueOf(s.getCenterY()) + "," + String.valueOf(s.getZ());
-            System.out.print(slotCoordinate);
-            if (s.getItem() == null) {
-                tempFreeSlots.add(s);
-            }
-            //Calculate gantry move time between input and current slot (usable for optimalization)
-            s.setPickupTime(calculateSlotInputMoveTime(gantryInput, s));
-            slotStructure.getSlotStructureMap().put(slotCoordinate, s);
-
-            if(!stacked){
-                //add slot to possible parent as a child
-                slotStructure.setChildCrossed(s);
-
-            }else{
-                slotStructure.setChildStacked(s);
-            }
-
-        }
+        implementSlotStructure(slotStructure);
 
         //Create new freeSlots object
         freeSlots = new FreeSlots(tempFreeSlots);
@@ -95,13 +69,53 @@ public class Solution {
     }
 
     /**
+     * Function which checks the amount of gantries and assigns them to variables for easy access
+     * */
+    public void setupGantries(){
+        //Setup gantries
+        gantryInput = problem.getGantries().get(0);
+        if (problem.getGantries().size() == 2) {
+            gantryOutput = problem.getGantries().get(1);
+        }
+    }
+
+    /**
+     * Function which fills the slot structure with slots
+     * */
+    public void implementSlotStructure(SlotStructure slotStructure){
+        //Adding all the slots to the HashMap
+        String slotCoordinate;
+        for (Slot s : problem.getSlots()) {
+            //create key by coordinate
+            slotCoordinate = String.valueOf(s.getCenterX()) + "," + String.valueOf(s.getCenterY()) + "," + String.valueOf(s.getZ());
+            System.out.print(slotCoordinate);
+            if (s.getItem() == null) {
+                tempFreeSlots.add(s);
+            }
+            //Calculate gantry move time between input and current slot (usable for optimalization)
+            s.setPickupTime(calculateSlotInputMoveTime(gantryInput, s));
+            slotStructure.getSlotStructureMap().put(slotCoordinate, s);
+
+            //check whether we are dealing with a stacked or a crossed setup, assign child accordingly
+            if(!stacked){
+                //add slot to possible parent as a child
+                slotStructure.setChildCrossed(s);
+
+            }else{
+                slotStructure.setChildStacked(s);
+            }
+
+        }
+    }
+
+    /**
      * Function which goes through the input job sequence
      */
     public void handleInputJobs() {
         for (Job j : problem.getInputJobSequence()) {
 
 
-            //Eerst de kraan klaarzetten om de job te doen
+            // MOve the gantry to the correct position
             executeGantryMove(j);
 
             //Get free slot
@@ -117,6 +131,7 @@ public class Solution {
                 //map toFillSlot object to object from hashMap
                 slotCoordinate = String.valueOf(freeSlotTemp.getCenterX()) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ());
 
+                //Check whether the slot underneath is empty
                 if(!stacked){
                     if(checkUnderneathCrossed(freeSlotTemp)){
                         break;
@@ -135,11 +150,17 @@ public class Solution {
             toFillSlot.setItem(j.getItem());  //add item to slot
             j.getItem().setSlot(toFillSlot);  //add slot to item
 
+            // effectively execute the move job
             executeMoveJob(toFillSlot,j);
 
         }
     }
 
+    /**
+     * Function which checks whether the slot underneath the given slot contains an item in a crossed setup
+     * @param freeSlotTemp The slot under which needs to be checked
+     * @return boolean True if there is no item underneath, false if not
+     * */
     public boolean checkUnderneathCrossed(Slot freeSlotTemp){
         String slotCoordinateUnderLeft = String.valueOf(freeSlotTemp.getCenterX() - 5) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ()-1);
         String slotCoordinateUnderRight = String.valueOf(freeSlotTemp.getCenterX() + 5) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ()-1);
@@ -155,6 +176,11 @@ public class Solution {
         return false;
     }
 
+    /**
+     * Function which checks whether the slot underneath the given slot contains an item in a stacked setup
+     * @param freeSlotTemp The slot under which needs to be checked
+     * @return boolean True if there is no item underneath, false if not
+     * */
     public boolean checkUnderneathStacked(Slot freeSlotTemp){
         String slotCoordinateStraightUnder = String.valueOf((freeSlotTemp.getCenterX()) + "," + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ()-1));
 
@@ -168,14 +194,15 @@ public class Solution {
     }
 
     /**
-     * Function which executes the input job
-     * Beweging van een item van in de kade(of van in de input)  naar een andere plaats in de kade
+     * Function which executes a move caused by digging out slots in a crossed setup
+     * @param j The job which contains the info about the move
+     *
      */
     public void performInputCrossed(Job j) {
 
 
 
-        //Eerst de kraan klaarzetten om de job te doen
+        //move gantry to the pickup location
 
         executeGantryMove(j);
 
@@ -229,9 +256,8 @@ public class Solution {
     }
 
     /**
-     * Function which executes the input job
-     *
-     * @param @Job j
+     * Function which executes a move caused by digging out slots in a stacked setup
+     * @param j The job which contains the information about the move to be performed
      */
     public void performInputStacked(Job j) {
 
@@ -265,6 +291,10 @@ public class Solution {
 
     }
 
+    /**
+     * Function which moves the gantry according to the given job
+     * @param j The job which contains the information about the move
+     * */
     public void executeGantryMove(Job j){
         //calculate pickup time (moving gantry from current position to input slot)
         timeToAdd = calculateGantryMoveTime(j.getPickup().getSlot(), gantryInput);
@@ -278,6 +308,11 @@ public class Solution {
 
     }
 
+    /**
+     * Function which moves the gantry according to a given job
+     * @param toFillSlot Slot which needs to be filled
+     * @param j The job containing the information about the move
+     * */
     public void executeMoveJob(Slot toFillSlot, Job j){
         //calculate delivery time (moving from input slot to free slot
         timeToAdd = calculateGantryMoveTime(toFillSlot, gantryInput);
@@ -338,7 +373,8 @@ public class Solution {
     }
 
     /**
-     * Resurive methode die een effectief een item zal uitgraven
+     * Recursive method which digs slots out in a crossed setup
+     * @param s The Slot which children need to be dug out
      */
     public void digSlotOutCrossed(Slot s) {
 
@@ -367,8 +403,7 @@ public class Solution {
     }
 
     /**
-     * Recursive method which digs out the necessary items.
-     *
+     * Recursive method which digs out the necessary items in a stacked setup.
      * @param @Slot s
      */
     public void digSlotOutStacked(Slot s) {
@@ -389,6 +424,10 @@ public class Solution {
 
     /**
      * Function which calculates the minimum x-coordinate of the range in which no slots may be taken to ensure correct digging.
+     * @param pickupLevel The Z level on which the current pickup is
+     * @param maxLevels The maximum levels in the current problem
+     * @param centerX the center X coordinate of the slot which needs to be moved to the output
+     * @return int The minimum x coordinate from which no slots can be taken as a free slot
      */
     public int calculatePlacementRangeMinX(int pickupLevel, int maxLevels, int centerX) {
         int differenceInLevels = maxLevels - pickupLevel;
@@ -398,6 +437,10 @@ public class Solution {
 
     /**
      * Function which calculates the maximum x-coordinate of the range in which no slots may be taken to ensure correct digging.
+     * @param pickupLevel The Z level on which the current pickup is
+     * @param maxLevels The maximum levels in the current problem
+     * @param centerX the center X coordinate of the slot which needs to be moved to the output
+     * @return int The minimum x coordinate from which no slots can be taken as a free slot
      */
     public int calculatePlacementRangeMaxX(int pickupLevel, int maxLevels, int centerX) {
         int differenceInLevels = maxLevels - pickupLevel;
@@ -408,9 +451,12 @@ public class Solution {
 
     /**
      * Function which calculates the minimal amount of time required to go from the gantry's current position to the slot
+     * @param pickupSlot The slot from where the pickup will be initiated
+     * @param gantry The gantry which will execute the move
+     * @return double The minimum time needed to move the gantry to the pickup position
      */
     public double calculateGantryMoveTime(Slot pickupSlot, Gantry gantry) {
-        //calculate both x and y moving times, ad this can be done in parallel, the shortest one is returned
+        //calculate both x and y moving times, as this can be done in parallel, the shortest one is returned
         double timeX = abs(gantry.getCurrentX() - pickupSlot.getCenterX()) / gantry.getXSpeed();
         double timeY = abs(gantry.getCurrentY() - pickupSlot.getCenterY()) / gantry.getYSpeed();
         if (timeX < timeY) {
@@ -422,9 +468,12 @@ public class Solution {
 
     /**
      * Function which calculates the minimal time required to move an item from the input slot to the given slot.
+     * @param gantryInput The gantry which will execute the move
+     * @param s The slot from where to move to
+     * @return double The minimum time needed to move the gantry to the pickup position
      */
     public double calculateSlotInputMoveTime(Gantry gantryInput, Slot s) {
-        //calculate both x and y moving times, ad this can be done in parallel, the shortest one is returned
+        //calculate both x and y moving times, as this can be done in parallel, the shortest one is returned
         double timeX = abs(problem.getInputSlot().getCenterX() - s.getCenterX()) / gantryInput.getXSpeed();
         double timeY = abs(problem.getInputSlot().getCenterY() - s.getCenterY()) / gantryInput.getYSpeed();
         if (timeX < timeY) {
@@ -436,6 +485,8 @@ public class Solution {
 
     /**
      * Function which updates the clock
+     * @param clock The current clock
+     * @param time The time to be added
      */
     public void updateClock(double clock, double time) {
         setClock(clock + time);
@@ -443,12 +494,17 @@ public class Solution {
 
     /**
      * Function which updates the coordinates of the crane
+     * @param gantry The gantry of which the coordinates need to be changed
+     * @param slot The slot coordinates to which the coordinates of the gantry need to be changed to
      */
     public void gantrySetCoordinates(Gantry gantry, Slot slot) {
         gantry.setCurrentX(slot.getCenterX());
         gantry.setCurrentY(slot.getCenterY());
     }
 
+    /**
+     * Function for debugging purposes
+     * */
     public void printOutput() {
         for (Output o : performedActions) {
             System.out.println("///////////////////////////////////");
