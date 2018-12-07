@@ -14,6 +14,7 @@ public class Gantry {
     //Toegevoegd
     private int currentX;
     private int currentY;
+    private int itemId;
 
     public Gantry(int id,
                   int xMin, int xMax,
@@ -74,6 +75,13 @@ public class Gantry {
         this.currentY = currentY;
     }
 
+    public int getItemId() {
+        return itemId;
+    }
+
+    public void setItemId(int itemId) {
+        this.itemId = itemId;
+    }
 
     public boolean overlapsGantryArea(Gantry g) {
         return g.xMin < xMax && xMin < g.xMax;
