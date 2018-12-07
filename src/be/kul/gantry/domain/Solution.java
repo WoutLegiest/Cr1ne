@@ -87,10 +87,14 @@ public class Solution {
 
     }
 
+    public void executeSolution(){
+
+    }
+
     /**
      * Function which goes through the input job sequence
      */
-    void handleInputJobsCrossed() {
+    public void handleInputJobsCrossed() {
 
         //Alle inputJobs are been handeld
         for (Job j : problem.getInputJobSequence()) {
