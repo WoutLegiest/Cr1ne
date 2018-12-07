@@ -88,7 +88,23 @@ public class Solution {
     }
 
     public void executeSolution(){
+        //get first item from input queue
+        //get first item of output queue
+        while(true){
+            //print current position gantries
 
+            //check
+            // When moving a gantry, update x position (based on how many x positions we can move during the time interval of 5)
+            // and update the Y coordinate until the y coordinate of the pickup/drop slot is reached
+
+            //check if output gantry can continue based on current position of input gantry
+            // if so move the output gantry
+            // if not move input gantry as far as needed to let the output gantry reach the pickup slot
+            // and update clock so that the rest of the output job can be performed as a whole without interruption
+
+            //check if input gantry can continue based on current position of the output gantry
+            // if so move the input gantry
+        }
     }
 
     /**
