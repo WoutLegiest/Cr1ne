@@ -20,6 +20,9 @@ public class Solution {
     private double timeToAdd = 0;
     private Gantry gantryInput, gantryOutput;
     private SlotStructure slotStructure;
+    //todo interval aanpassen aan traagste speed
+    private final static  int timeInterval = 5;
+    private static int safetyDistance = 0;
 
     private int pickupLevel;
 
@@ -44,6 +47,7 @@ public class Solution {
         //Setup gantries
         gantryInput = problem.getGantries().get(0);
         gantryInput.setItemId(-1);
+        safetyDistance = problem.getSafetyDistance();
 
         if (problem.getGantries().size() == 2) {
             gantryOutput = problem.getGantries().get(1);
@@ -91,9 +95,9 @@ public class Solution {
 
     public void executeSolution(){
         //get first item from input queue
-        Job initialInputJob = problem.getInputJobSequence().get(0);
+        Job inputJob = problem.getInputJobSequence().get(0);
         //get first item of output queue
-        Job initialOutputJob = problem.getOutputJobSequence().get(0);
+        Job outputJob = problem.getOutputJobSequence().get(0);
         while(true){
             //print current position gantries
             performedActions.add(new Output(gantryInput.getId(), clock,
@@ -101,7 +105,6 @@ public class Solution {
             performedActions.add(new Output(gantryOutput.getId(), clock,
                     gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
 
-            //check
             // When moving a gantry, update x position (based on how many x positions we can move during the time interval of 5)
             // and update the Y coordinate until the y coordinate of the pickup/drop slot is reached
 
@@ -110,93 +113,33 @@ public class Solution {
             // if not move input gantry as far as needed to let the output gantry reach the pickup slot
             // and update clock so that the rest of the output job can be performed as a whole without interruption
 
+            if(outputJob.getItem().getSlot() != null){
+                boolean feasibleMove = checkIfOutputGantryMoveIsFeasible(gantryOutput,gantryInput,outputJob);
+                if(feasibleMove){
+                    executeOutputGantryMove(gantryOutput, outputJob);
+                }
+            }
+
             //check if input gantry can continue based on current position of the output gantry
             // if so move the input gantry
         }
     }
 
-    /**
-     * Function which goes through the input job sequence
-     */
-    public void handleInputJobsCrossed() {
+    public boolean checkIfOutputGantryMoveIsFeasible(Gantry outputGantry, Gantry inputGantry, Job job){
+        int outputXCoordinate = outputGantry.getCurrentX();
+        int outputGantryPossibleXMove = (int)outputGantry.getXSpeed() * timeInterval;
+        int inputGantryCurrentXPosition = inputGantry.getCurrentX();
 
-        //Alle inputJobs are been handeld
-        for (Job j : problem.getInputJobSequence()) {
+        int pickupXCoordinate = job.getItem().getSlot().getCenterX();
 
-            //Eerst de kraan klaarzetten om de job te doen
-            //Deze print ook al moves uit van de kraan
-            executeGantryMove(j);
-
-            //Generate free slot
-            Slot freeSlotTemp;
-            Slot toFillSlot = null;
-            String slotCoordinate = "";
-
-            //Fill freeSlot
-            while (true) {
-
-                freeSlotTemp = freeSlots.getFreeSlots().remove();
-
-                //map toFillSlot object to object from hashMap, with centercoordinates
-                slotCoordinate = String.valueOf(freeSlotTemp.getCenterX()) + ","
-                        + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ());
-
-                //Lus stop met lopen als er een goede slot is gevonden
-                //Een slot waarvan de de 2 plaatsen onder hem vrij zijn
-                if(checkUnderneath(freeSlotTemp))
-                    break;
-
-                freeSlots.addSlot(freeSlotTemp);
-            }
-
-            toFillSlot = slotStructure.getSlotStructureMap().get(slotCoordinate);
-
-            toFillSlot.setItem(j.getItem());  //add item to slot
-            j.getItem().setSlot(toFillSlot);  //add slot to item
-
-            executeMoveJob(toFillSlot,j);
+        if(pickupXCoordinate < outputXCoordinate){
+            return outputXCoordinate - outputGantryPossibleXMove > inputGantryCurrentXPosition + safetyDistance;
         }
-    }
-
-    /**
-     * Methode for the stacked version of the problem
-     */
-    public void handleInputJobsStacked() {
-
-        for (Job j : problem.getInputJobSequence()) {
-
-            //Move the gantry to the pickup location
-            executeGantryMove(j);
-
-            //Initialize variables to find free slot
-            Slot freeSlotTemp = null;
-            String slotCoordinate = "";
-
-            //Setup loop
-            boolean goodSlot = false;
-            while(!goodSlot){
-                //Get slot from the queue
-                freeSlotTemp = freeSlots.getFreeSlots().remove();
-
-                //Check if place slot is not the same as the pickup slot
-                if(freeSlotTemp.getCenterX() != j.getPickup().getSlot().getCenterX()
-                        && freeSlotTemp.getCenterY() != j.getPickup().getSlot().getCenterY()){
-                    goodSlot = true;
-                }
-
-                //If slot is not correct, add to the queue
-                freeSlots.addSlot(freeSlotTemp);
-            }
-
-            System.out.println("Graken uit de while");
-
-            //Set both references
-            freeSlotTemp.setItem(j.getItem());  //add item to slot
-            j.getItem().setSlot(freeSlotTemp);  //add slot to item
-
-            //Execute the move from the pickup location to the place location
-            executeMoveJob(freeSlotTemp, j);
+        else{
+            return true;
         }
+
+
     }
 
     /**
@@ -228,22 +171,126 @@ public class Solution {
      * Part One of a Job
      * @param j To do job
      */
-    private void executeGantryMove(Job j){
+    private void executeOutputGantryMove(Gantry gantry, Job j){
+        int outputXCoordinate = gantry.getCurrentX();
+        int outputGantryPossibleXMove = (int)gantry.getXSpeed() * timeInterval;
+        int pickupXCoordinate = j.getItem().getSlot().getCenterX();
+        int pickupYCoordinate = j.getItem().getSlot().getCenterY();
 
-        //calculate pickup time (moving gantry from current position to input slot)
-        timeToAdd = calculateGantryMoveTime(j.getPickup().getSlot(), gantryInput);
-        updateClock(clock, timeToAdd);
 
-        //set new gantry coordinates
-        gantrySetCoordinates(gantryInput, j.getPickup().getSlot());
+        // check if we have to move to the left
+        if(outputXCoordinate > pickupXCoordinate){
+
+            // check if we need less distance then foreseen feasible distance by the time interval
+            // this means we reach x coordinate of the pickup slot
+            if(outputXCoordinate - pickupXCoordinate < outputGantryPossibleXMove){
+
+                // voor de output rekening houden met de mindere klok tijd die we nodig hadden!
+                gantry.setCurrentX(pickupXCoordinate);
+                double timeRequired = (outputXCoordinate - pickupXCoordinate)/gantry.getXSpeed();
+
+
+                int outputYCoordinate = gantry.getCurrentY();
+                int outputGantryPossibleYMove = (int) (gantry.getYSpeed() * timeRequired);
+                //check if the y coordinate of the pickup is on a higher level than the current y coordinate of the gantry
+                // if it is equal we do not execute
+                if(gantry.getCurrentY() > pickupYCoordinate){
+                    // now we have to move down on the y axis
+                    // can we reach te y coordinate within the new time interval
+                    if(outputYCoordinate - outputGantryPossibleYMove <= pickupYCoordinate){
+                        //we can reach the pickup slot y coordinate within the new time interval
+                        //set y coordinate
+                        gantry.setCurrentY(pickupYCoordinate);
+                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
+                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+
+                    }else{
+                        // y coordinate of the pickup slot could not be reached within the new time interval
+                        timeRequired = (outputYCoordinate - pickupYCoordinate )/ gantry.getYSpeed();
+                        gantry.setCurrentY(pickupYCoordinate);
+                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
+                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+
+                    }
+                }else if(gantry.getCurrentY() < pickupYCoordinate){
+                    // now we have to move up
+                    // can we reach te y coordinate within the new time interval
+                    if(outputYCoordinate + outputGantryPossibleYMove >= pickupYCoordinate){
+                        //we can reach the pickup slot y coordinate within the new time interval
+                        //set y coordinate
+                        gantry.setCurrentY(pickupYCoordinate);
+                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
+                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+
+                    }else{
+                        // y coordinate of the pickup slot could not be reached within the new time interval
+                        timeRequired = (outputYCoordinate + pickupYCoordinate )/ gantry.getYSpeed();
+                        gantry.setCurrentY(pickupYCoordinate);
+                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
+                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+
+                    }
+
+                }
+            }else if(outputXCoordinate - pickupXCoordinate >= outputGantryPossibleXMove){
+                gantry.setCurrentX(outputXCoordinate - outputGantryPossibleXMove);
+
+
+                int outputYCoordinate = gantry.getCurrentY();
+                int outputGantryPossibleYMove = (int) (gantry.getYSpeed() * timeInterval);
+                //check if the y coordinate of the pickup is on a higher level than the current y coordinate of the gantry
+                if(gantry.getCurrentY() > pickupYCoordinate){
+                    // now we have to move down on the y axis
+                    // can we reach te y coordinate within the new time interval
+                    if(outputYCoordinate - outputGantryPossibleYMove <= pickupYCoordinate){
+                        //we can reach the pickup slot y coordinate within the new time interval
+                        //set y coordinate
+                        gantry.setCurrentY(pickupYCoordinate);
+                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
+                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+
+                    }else{
+                        // y coordinate of the pickup slot could not be reached within the new time interval
+                        gantry.setCurrentY(outputYCoordinate - outputGantryPossibleYMove);
+                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
+                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+
+                    }
+                }else if(gantry.getCurrentY() < pickupYCoordinate){
+                    // now we have to move up
+                    // can we reach te y coordinate within the new time interval
+                    if(outputYCoordinate + outputGantryPossibleYMove >= pickupYCoordinate){
+                        //we can reach the pickup slot y coordinate within the new time interval
+                        //set y coordinate
+                        gantry.setCurrentY(pickupYCoordinate);
+                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
+                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+
+                    }else{
+                        // y coordinate of the pickup slot could not be reached within the new time interval
+                        gantry.setCurrentY(outputYCoordinate + outputGantryPossibleYMove);
+                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
+                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+
+                    }
+
+                }
+            }
+        }
+        // move to the right
+        else if(outputXCoordinate < pickupXCoordinate){
+            //TODO
+        }
+
+
+        //set new gantry x coordinate
+        gantry.setCurrentX(outputXCoordinate - outputGantryPossibleXMove);
+
+        //set new y coordinate
 
         //action performed: adding to output
-        performedActions.add(new Output(gantryInput.getId(), clock,
-                gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
-        updateClock(clock, problem.getPickupPlaceDuration());
-
-        performedActions.add(new Output(gantryInput.getId(), clock,
-                gantryInput.getCurrentX(), gantryInput.getCurrentY(), j.getItem().getId()));
+        performedActions.add(new Output(gantry.getId(), clock,
+                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
     }
 
@@ -273,60 +320,9 @@ public class Solution {
 
     }
 
-    /**
-     * Function which handles the output job sequence
-     * Deze methode handelt een output job af, het zal dus een item uitgraven als boven hem en dan naar de output plaats
-     * brengen
-     */
-    void handleOutputJobs() {
-
-        for (Job j : problem.getOutputJobSequence()) {
-
-            // First, get item and find slot from item
-            Item i = problem.getItems().get(j.getItem().getId());
-
-            //System.out.println(i.getId());
-            Slot pickupSlot = i.getSlot();
-            pickupLevel = pickupSlot.getZ();
-
-            // Second recursively look for any children and reallocate them
-            //Print it also out
-
-            if(crossed){
-                if (pickupSlot.getItem() != null)
-                    digSlotOutCrossed(pickupSlot);
-            }
-            else{
-                System.out.println("Juiste digout");
-                if (pickupSlot.getItem() != null && pickupSlot.getChildLeft() != null) {
-                    if (pickupSlot.getChildLeft().getItem() != null) {
-                        System.out.println("Recursie");
-                        digSlotOutStacked(pickupSlot.getChildLeft());
-                    }
-
-                }
-            }
-
-            System.out.println("Na digOut");
-
-            //Set the pickup slot, needed for the executeGantryMove function
-            j.getPickup().setSlot(pickupSlot);
-
-            //All children are dug out, move the gantry again
-            executeGantryMove(j);
-
-            //Assign output slot to the item
-            i.setSlot(problem.getOutputSlot());
-
-            //Execute the move from the pickup location to the place location
-            executeMoveJob(problem.getOutputSlot(),j);
-            pickupSlot.setItem(null);
-        }
-    }
-
-    /**
+/*    *//**
      * Resurive methode die een effectief een item zal uitgraven
-     */
+     *//*
     private void digSlotOutCrossed(Slot s) {
 
         if (s.getChildLeft() != null)
@@ -346,10 +342,10 @@ public class Solution {
 
     }
 
-    /**
+    *//**
      * Recursive method that will dig out a slot
      * @param s the to dig out slot
-     */
+     *//*
     private void digSlotOutStacked(Slot s) {
 
         if (s.getChildLeft() != null) {
@@ -365,97 +361,9 @@ public class Solution {
         performInputStacked(new Job(s.getId(), problem.getItems().get(s.getItem().getId()), s, null));
         s.setItem(null);
 
-    }
+    }*/
 
-    /**
-     * Function which executes the input job
-     * Beweging van een item van in de kade(of van in de input)  naar een andere plaats in de kade
-     */
-    private void performInputCrossed(Job j) {
 
-        //Eerst de kraan klaarzetten om de job te doen
-        executeGantryMove(j);
-
-        //Get free slot
-        Slot freeSlotTemp;
-
-        //Variables needed for range calculation
-        int minX;
-        int maxX;
-
-        //Initiate loop to find a correct slot
-        while (true) {
-
-            //Calculate placement ranges
-            minX = calculatePlacementRangeMinX(pickupLevel, problem.getMaxLevels(),
-                    j.getPickup().getSlot().getCenterX());
-            maxX = calculatePlacementRangeMaxX(pickupLevel, problem.getMaxLevels(),
-                    j.getPickup().getSlot().getCenterX());
-
-            //Get slot from the queue
-            freeSlotTemp = freeSlots.getFreeSlots().remove();
-
-            //Check if freeSlotTemp is not within the range
-            if (freeSlotTemp.getCenterY() == j.getPickup().getSlot().getCenterY()) {
-                if (freeSlotTemp.getCenterX() < minX && freeSlotTemp.getCenterX() > maxX) {
-
-                    //Check if the slot has two filled underlying slots.
-                    if(checkUnderneath(freeSlotTemp))
-                        break;
-                }
-            }
-            //If slots has a different Y coordinate, no range check is needed
-            else if (freeSlotTemp.getCenterY() != j.getPickup().getSlot().getCenterY())
-                if(checkUnderneath(freeSlotTemp))
-                    break;
-
-            //If slot is not feasible, add to the queue again and rerun the loop
-            freeSlots.addSlot(freeSlotTemp);
-
-            System.out.println("Lus lus");
-        }
-
-        //Loop ended, assign the slot to the item and vice versa
-        freeSlotTemp.setItem(j.getItem());  //add item to slot
-        j.getItem().setSlot(freeSlotTemp);  //add slot to item
-
-        //Execute the move from the pickup location to the place location
-        executeMoveJob(freeSlotTemp,j);
-
-    }
-
-    private void performInputStacked(Job j) {
-
-        //Move the gantry to the pickup location
-        executeGantryMove(j);
-
-        //Initialize variables to find free slot
-        Slot freeSlotTemp = null;
-        String slotCoordinate = "";
-
-        //Setup loop
-        boolean goodSlot = false;
-        while(!goodSlot){
-            //Get slot from the queue
-            freeSlotTemp = freeSlots.getFreeSlots().remove();
-
-            //Check if place slot is not the same as the pickup slot
-            if(freeSlotTemp.getCenterX() != j.getPickup().getSlot().getCenterX() && freeSlotTemp.getCenterY() != j.getPickup().getSlot().getCenterY()){
-                goodSlot = true;
-            }
-
-            //If slot is not correct, add to the queue
-            freeSlots.addSlot(freeSlotTemp);
-        }
-
-        //Set both references
-        freeSlotTemp.setItem(j.getItem());  //add item to slot
-        j.getItem().setSlot(freeSlotTemp);  //add slot to item
-
-        //Execute the move from the pickup location to the place location
-        executeMoveJob(freeSlotTemp, j);
-
-    }
 
     /**
      * Function which calculates the minimum x-coordinate of the range in which no slots may be taken to ensure correct digging.
