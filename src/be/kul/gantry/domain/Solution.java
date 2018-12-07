@@ -18,7 +18,7 @@ public class Solution {
     private FreeSlots freeSlots;
     private List<Output> performedActions = new ArrayList<>();
     private double timeToAdd = 0;
-    private Gantry gantryInput;
+    private Gantry gantryInput, gantryOutput;
     private SlotStructure slotStructure;
 
     private int pickupLevel;
@@ -43,9 +43,11 @@ public class Solution {
 
         //Setup gantries
         gantryInput = problem.getGantries().get(0);
+        gantryInput.setItemId(-1);
 
         if (problem.getGantries().size() == 2) {
-            Gantry gantryOutput = problem.getGantries().get(1);
+            gantryOutput = problem.getGantries().get(1);
+            gantryOutput.setItemId(-1);
         }
 
         //Create new slot structure
@@ -94,6 +96,10 @@ public class Solution {
         Job initialOutputJob = problem.getOutputJobSequence().get(0);
         while(true){
             //print current position gantries
+            performedActions.add(new Output(gantryInput.getId(), clock,
+                    gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
+            performedActions.add(new Output(gantryOutput.getId(), clock,
+                    gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
 
             //check
             // When moving a gantry, update x position (based on how many x positions we can move during the time interval of 5)
