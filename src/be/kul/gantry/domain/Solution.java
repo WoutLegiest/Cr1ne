@@ -89,7 +89,9 @@ public class Solution {
 
     public void executeSolution(){
         //get first item from input queue
+        Job initialInputJob = problem.getInputJobSequence().get(0);
         //get first item of output queue
+        Job initialOutputJob = problem.getOutputJobSequence().get(0);
         while(true){
             //print current position gantries
 
