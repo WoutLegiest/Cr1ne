@@ -131,12 +131,32 @@ public class Solution {
                         }else{
                             digSlotOutStacked(outputJob.getItem().getSlot());
                         }
+
+                        // now move the item to the output slot
+                        gantryOutput.setItemId(outputJob.getItem().getId());
+
+                        performedActions.add(new Output(gantryOutput.getId(), clock,
+                                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
+
+                        int outputXCoordinate = gantryOutput.getCurrentX();
+                        // calculate the time required to move to the output slot
+                        double timeRequired = abs(outputXCoordinate - problem.getOutputSlot().getCenterX())/gantryInput.getXSpeed();
+                        gantryOutput.setCurrentX(problem.getOutputSlot().getCenterX());
+                        // update the clock
+                        updateClock(clock, timeRequired);
+                        performedActions.add(new Output(gantryOutput.getId(), clock ,
+                                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
+                        gantryOutput.setItemId(-1);
+                        performedActions.add(new Output(gantryOutput.getId(), clock + problem.getPickupPlaceDuration() ,
+                                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
+
                         outputJobCount++;
                         // assign new output job
                         outputJob = problem.getOutputJobSequence().get(outputJobCount);
                     }
                 }
             }
+            //TODO: input handling
 
 
             //check if input gantry can continue based on current position of the output gantry
@@ -169,7 +189,7 @@ public class Solution {
      * @param freeSlotTemp The to check slot
      * @return Boolean that is true if there are items under the current item
      */
-    private boolean checkUnderneath(Slot freeSlotTemp){
+    private boolean checkUnderneathCrossed(Slot freeSlotTemp){
 
         String slotCoordinateUnderLeft = String.valueOf(freeSlotTemp.getCenterX() - 5) + ","
                 + String.valueOf(freeSlotTemp.getCenterY()) + "," + String.valueOf(freeSlotTemp.getZ() - 1);
@@ -179,10 +199,10 @@ public class Solution {
         Slot underLeft = slotStructure.getSlotStructureMap().get(slotCoordinateUnderLeft);
         Slot underRight = slotStructure.getSlotStructureMap().get(slotCoordinateUnderRight);
 
-        //TODO: Verduidelijking, mag toch ook op de grond ?
         if (underLeft != null && underRight != null)
             return underLeft.getItem() != null && underRight.getItem() != null;
-
+        else if(underLeft == null && underRight == null)
+            return true;
         return false;
     }
 
@@ -500,7 +520,7 @@ public class Solution {
      * Resurive methode die een effectief een item zal uitgraven
      */
     private void digSlotOutCrossed(Slot s) {
-        //TODO check gantry move feasibility
+
         if (s.getChildLeft() != null)
             if (s.getChildLeft().getItem() != null)
                 digSlotOutCrossed(s.getChildLeft());
@@ -524,7 +544,7 @@ public class Solution {
      * @param s the to dig out slot
      */
     private void digSlotOutStacked(Slot s) {
-        //TODO: check gantry move feasibility
+
         if (s.getChildLeft() != null) {
             if (s.getChildLeft().getItem() != null){
                 System.out.println("Recursie voor ");
@@ -541,8 +561,98 @@ public class Solution {
     }
 
     public void performInputCrossed(Job j){
-        // first make sure the input gantry is not in the way
 
+        // move the output gantry in place
+
+        // print out previous coordinates
+        performedActions.add(new Output(gantryOutput.getId(), clock,
+                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
+
+        int outputXCoordinate = gantryOutput.getCurrentX();
+        double timeRequired = abs(outputXCoordinate - j.getItem().getSlot().getCenterX())/gantryInput.getXSpeed();
+        gantryOutput.setCurrentX(j.getItem().getSlot().getCenterX());
+        // update the clock
+        updateClock(clock, timeRequired);
+        performedActions.add(new Output(gantryOutput.getId(), clock ,
+                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
+
+        //Get free slot
+        Slot freeSlotTemp;
+
+        //Variables needed for range calculation
+        int minX;
+        int maxX;
+
+        //Initiate loop to find a correct slot
+        while (true) {
+
+            //Calculate placement ranges
+            minX = calculatePlacementRangeMinX(pickupLevel, problem.getMaxLevels(),
+                    j.getPickup().getSlot().getCenterX());
+            maxX = calculatePlacementRangeMaxX(pickupLevel, problem.getMaxLevels(),
+                    j.getPickup().getSlot().getCenterX());
+
+            //Get slot from the queue
+            freeSlotTemp = freeSlots.getFreeSlots().remove();
+
+            //Check if freeSlotTemp is not within the range
+            if (freeSlotTemp.getCenterY() == j.getPickup().getSlot().getCenterY()) {
+                if (freeSlotTemp.getCenterX() < minX && freeSlotTemp.getCenterX() > maxX) {
+
+                    //Check if the slot has two filled underlying slots.
+                    if(checkUnderneathCrossed(freeSlotTemp))
+                        break;
+                }
+            }
+            //If slots has a different Y coordinate, no range check is needed
+            else if (freeSlotTemp.getCenterY() != j.getPickup().getSlot().getCenterY())
+                if(checkUnderneathCrossed(freeSlotTemp))
+                    break;
+
+            //If slot is not feasible, add to the queue again and rerun the loop
+            freeSlots.addSlot(freeSlotTemp);
+
+            System.out.println("Lus lus");
+        }
+
+        // now that we have a free slot, check whether the input crane is in the way
+        if(!checkSafetyDistance(gantryInput, freeSlotTemp)){
+            //if false, move input gantry as far as needed
+
+            // print out current input gantry coordinates for safety
+            performedActions.add(new Output(gantryInput.getId(), clock,
+                    gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
+            if(freeSlotTemp.getCenterX() > gantryInput.getCurrentX()){
+                // we have to move the gantry to the left
+                int inputXCoordinate = gantryInput.getCurrentX();
+                timeRequired = (inputXCoordinate - (inputXCoordinate - 20))/gantryInput.getXSpeed();
+                updateClock(clock, timeRequired);
+                performedActions.add(new Output(gantryInput.getId(), clock ,
+                        gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
+            }else if (freeSlotTemp.getCenterX() < gantryInput.getCurrentX()){
+                // we have to move the gantry to the right
+                int inputXCoordinate = gantryInput.getCurrentX();
+                timeRequired = ((inputXCoordinate + 20) - inputXCoordinate)/gantryInput.getXSpeed();
+                updateClock(clock, timeRequired);
+                performedActions.add(new Output(gantryInput.getId(), clock ,
+                        gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
+            }
+        }
+
+       // input gantry is moved, assign the slot to the item and vice versa
+        freeSlotTemp.setItem(j.getItem());  //add item to slot
+        j.getItem().setSlot(freeSlotTemp);  //add slot to item
+
+        //Execute the move from the pickup location to the place location
+        executeMoveJob(freeSlotTemp,j);
+
+    }
+
+    public boolean checkSafetyDistance(Gantry gantry, Slot s){
+        int currentXCoordinateGantry = gantry.getCurrentX();
+        int slotXCoordinate = s.getCenterX();
+
+        return abs(currentXCoordinateGantry - slotXCoordinate) > 20;
     }
 
 
