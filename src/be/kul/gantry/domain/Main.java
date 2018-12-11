@@ -15,18 +15,7 @@ public class Main {
 
         Solution solution = new Solution(inputFileName);
 
-        //Afhandelen van de inputjobs
-        if(Solution.isCrossed())
-            solution.handleInputJobsCrossed();
-        else{
-            System.out.println("Begin aan de input");
-            solution.handleInputJobsStacked();
-        }
-
-
-        System.out.println("Beginnen aan output");
-        //Afhandelen van de outputjobs
-        solution.handleOutputJobs();
+        solution.executeSolution();
 
         System.out.println("Beginnen aan het uitschrijven");
         //Wegschrijven naar de outputfile
