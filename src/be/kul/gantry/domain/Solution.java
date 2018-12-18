@@ -66,7 +66,7 @@ public class Solution {
             //create key by coordinate
             slotCoordinate = String.valueOf(s.getCenterX()) + ","
                     + String.valueOf(s.getCenterY()) + "," + String.valueOf(s.getZ());
-            System.out.print(slotCoordinate);
+            //System.out.print(slotCoordinate);
 
             if (s.getItem() == null)
                 tempFreeSlots.add(s);
@@ -101,6 +101,7 @@ public class Solution {
         int outputJobCount = 0;
         int inputJobCount = 0;
         while(true){
+
             //print current position gantries
             performedActions.add(new Output(gantryInput.getId(), clock,
                     gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
@@ -117,6 +118,7 @@ public class Solution {
             if(outputJobCount != problem.getOutputJobSequence().size()){
                 if(outputJob.getItem().getSlot() != null){
 
+
                     // set the pickup slot in the job
                     outputJob.getPickup().setSlot(outputJob.getItem().getSlot());
 
@@ -124,10 +126,11 @@ public class Solution {
                     pickupLevel = outputJob.getItem().getSlot().getZ();
 
                     // check for feasible move
-                    boolean feasibleMove = checkIfOutputGantryMoveIsFeasible(gantryOutput,gantryInput,outputJob);
+                    boolean feasibleMove = checkIfOutputGantryMoveIsFeasibleForPickup(gantryOutput,gantryInput,outputJob);
                     if(!feasibleMove){
                         //move input gantry as far as needed (maybe keep dig-out zone in mind)
                         moveInputGantry(gantryInput, outputJob);
+                        executeOutputGantryMove(gantryOutput, outputJob);
                     }else{
                         executeOutputGantryMove(gantryOutput, outputJob);
                     }
@@ -140,12 +143,14 @@ public class Solution {
                             digSlotOutStacked(outputJob.getItem().getSlot());
                         }
 
+                        // get clock value of the latest move
+                        clock = performedActions.get(performedActions.size() - 1).getTimeStamp();
                         // now move the item to the output slot
                         // print current position
                         performedActions.add(new Output(gantryOutput.getId(), clock,
                                 gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
 
-                        //move towards the pickup slot
+                        //move towards the pickup slot (unnecessary, is already done)
                         int outputXCoordinate = gantryOutput.getCurrentX();
                         int outputYCoordinate = gantryOutput.getCurrentY();
                         // calculate the time needed (maximum of x and y axis time)
@@ -166,11 +171,15 @@ public class Solution {
                                 gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
                         //add the item
                         gantryOutput.setItemId(outputJob.getItem().getId());
-                        //updateClock(clock, problem.getPickupPlaceDuration());
-                        performedActions.add(new Output(gantryOutput.getId(), clock + problem.getPickupPlaceDuration(),
+                        outputJob.getPickup().getSlot().setItem(null);
+
+                        updateClock(clock, problem.getPickupPlaceDuration());
+                        performedActions.add(new Output(gantryOutput.getId(), clock ,
                                 gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
 
 
+                        outputXCoordinate = gantryOutput.getCurrentX();
+                        outputYCoordinate = gantryOutput.getCurrentY();
                         // calculate the time required to move to the output slot
                         timeRequiredXAxis = abs(outputXCoordinate - problem.getOutputSlot().getCenterX())/gantryOutput.getXSpeed();
                         timeRequiredYAxis = abs(outputYCoordinate - problem.getOutputSlot().getCenterY())/gantryOutput.getYSpeed();
@@ -178,28 +187,36 @@ public class Solution {
                         else timeRequired = timeRequiredYAxis;
 
                         // move the output gantry
-                        gantryOutput.setCurrentX(outputJob.getItem().getSlot().getCenterX());
-                        gantryOutput.setCurrentY(outputJob.getItem().getSlot().getCenterY());
+                        gantryOutput.setCurrentX(problem.getOutputSlot().getCenterX());
+                        gantryOutput.setCurrentY(problem.getOutputSlot().getCenterY());
 
                         // update the clock
                         updateClock(clock, timeRequired);
                         performedActions.add(new Output(gantryOutput.getId(), clock ,
                                 gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
                         gantryOutput.setItemId(-1);
-                        //updateClock(clock, problem.getPickupPlaceDuration());
-                        performedActions.add(new Output(gantryOutput.getId(), clock + problem.getPickupPlaceDuration(),
+                        updateClock(clock, problem.getPickupPlaceDuration());
+                        performedActions.add(new Output(gantryOutput.getId(), clock,
                                 gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
 
                         outputJobCount++;
                         // assign new output job
-                        outputJob = problem.getOutputJobSequence().get(outputJobCount);
+                        if(outputJobCount < problem.getOutputJobSequence().size())
+                            outputJob = problem.getOutputJobSequence().get(outputJobCount);
                     }
                 }
             }
             //input handling
+            // print out current position input gantry
+            performedActions.add(new Output(gantryInput.getId(), clock,
+                    gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
             if(inputJobCount != problem.getInputJobSequence().size()){
                 // if there is no place slot assigned yet, we assign one
-                if(inputJob.getPlace().getSlot() != null){
+                if(inputJob.getPlace().getSlot() == null){
+                    // move the input gantry to the input slot, once for every input job
+                    moveInputGantryToInput(gantryInput, problem.getInputSlot(), inputJob);
+
+                    System.out.println("IN " + inputJob.getId());
                     //get free slot first, than check for feasibility of the move
 
                     //Get free slot when the input crane is above the input slot
@@ -221,19 +238,46 @@ public class Solution {
                     }
 
                     freeSlotTemp.setItem(inputJob.getItem());  //add item to slot
-                    inputJob.getItem().setSlot(freeSlotTemp);  //add slot to item
+
                     inputJob.getPlace().setSlot(freeSlotTemp); // add the free slot to the job
 
                 }
 
+                // check whether the output job item is assigned to a slot, if not it is in the input queue and this queue should proceed, which means moving the output gantry if necessary
+                boolean outputNotReady = outputJob.getItem().getSlot() == null;
+
 
 
                 boolean feasibleMove = checkIfInputGantryMoveIsFeasible(gantryOutput,gantryInput, inputJob);
-                if(feasibleMove){
+                if(!feasibleMove && outputNotReady){
+                    moveOutputGantry(gantryOutput,inputJob);
                     executeInputGantryMove(gantryInput, inputJob);
-                }else{
-                    //wait, do nothing
+                }else if(feasibleMove){
+                    executeInputGantryMove(gantryInput, inputJob);
                 }
+                if(gantryInput.getCurrentX() == inputJob.getPlace().getSlot().getCenterX() && gantryInput.getCurrentY() == inputJob.getPlace().getSlot().getCenterY()){
+
+                    //we have reached the place slot
+                    performedActions.add(new Output(gantryInput.getId(), clock,
+                            gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
+
+                    // only now set the slot to ensure that the ouptut gantry would not start moving to soon to pick this item up
+                    inputJob.getItem().setSlot(inputJob.getPlace().getSlot());  //add slot to item
+                    inputJob.getPlace().getSlot().setItem(inputJob.getItem());  // add the item to the slot
+
+                    gantryInput.setItemId(-1);
+                    //update the clock
+                    updateClock(clock, problem.getPickupPlaceDuration());
+                    // write out
+                    performedActions.add(new Output(gantryInput.getId(), clock ,
+                            gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
+
+                    // assign new input job
+                    inputJobCount++;
+                    if(inputJobCount < problem.getInputJobSequence().size())
+                        inputJob = problem.getInputJobSequence().get(inputJobCount);
+                }
+
             }
 
 
@@ -241,10 +285,14 @@ public class Solution {
             // if so move the input gantry
 
             // update the clock, add the time interval
+
+            if(inputJobCount == problem.getInputJobSequence().size() && outputJobCount == problem.getOutputJobSequence().size()) break;
+
+            updateClock(clock, timeInterval);
         }
     }
 
-    private boolean checkIfOutputGantryMoveIsFeasible(Gantry outputGantry, Gantry inputGantry, Job job){
+    private boolean checkIfOutputGantryMoveIsFeasibleForPickup(Gantry outputGantry, Gantry inputGantry, Job job){
         int outputXCoordinate = outputGantry.getCurrentX();
         int outputGantryPossibleXMove = (int)outputGantry.getXSpeed() * timeInterval;
         int inputGantryCurrentXPosition = inputGantry.getCurrentX();
@@ -253,7 +301,38 @@ public class Solution {
 
         // if we move to the left, we need to check safety distance constraints
         if(pickupXCoordinate < outputXCoordinate){
-            return outputXCoordinate - outputGantryPossibleXMove > inputGantryCurrentXPosition + safetyDistance;
+            // check whether we need the whole move
+            if(outputXCoordinate - pickupXCoordinate < outputGantryPossibleXMove){
+                return pickupXCoordinate > inputGantryCurrentXPosition + safetyDistance;
+            }else{
+                return outputXCoordinate - outputGantryPossibleXMove > inputGantryCurrentXPosition + safetyDistance;
+            }
+
+        }
+        // if we move to the right, no check is needed
+        else{
+            return true;
+        }
+
+
+    }
+
+    private boolean checkIfOutputGantryMoveIsFeasibleForPlace(Gantry outputGantry, Gantry inputGantry, Job job){
+        int outputXCoordinate = outputGantry.getCurrentX();
+        int outputGantryPossibleXMove = (int)outputGantry.getXSpeed() * timeInterval;
+        int inputGantryCurrentXPosition = inputGantry.getCurrentX();
+
+        int placeXCoordinate = job.getPlace().getSlot().getCenterX();
+
+        // if we move to the left, we need to check safety distance constraints
+        if(placeXCoordinate < outputXCoordinate){
+            // check whether we need the whole move
+            if(outputXCoordinate - placeXCoordinate < outputGantryPossibleXMove){
+                return placeXCoordinate > inputGantryCurrentXPosition + safetyDistance;
+            }else{
+                return outputXCoordinate - outputGantryPossibleXMove > inputGantryCurrentXPosition + safetyDistance;
+            }
+
         }
         // if we move to the right, no check is needed
         else{
@@ -271,8 +350,13 @@ public class Solution {
 
         int placeXCoordinate = j.getPlace().getSlot().getCenterX();
 
-        if( placeXCoordinate < inputXCoordinate){
-            return inputXCoordinate - inputGantryPossibleXMove > outputGantryCurrentXPosition + safetyDistance;
+        // if we move to the right, we need to check safety distance constraints
+        if( placeXCoordinate > inputXCoordinate){
+            //check whether we need the whole move
+            if(placeXCoordinate - inputXCoordinate < inputGantryPossibleXMove){
+                return placeXCoordinate < outputGantryCurrentXPosition - safetyDistance;
+            }
+            return inputXCoordinate + inputGantryPossibleXMove < outputGantryCurrentXPosition - safetyDistance;
         }
         else{
             return true;
@@ -293,18 +377,78 @@ public class Solution {
 
         // print current position
         performedActions.add(new Output(inputGantry.getId(), clock,
-                gantryInput.getCurrentX(), inputGantry.getCurrentY(), inputGantry.getItemId()));
+                inputGantry.getCurrentX(), inputGantry.getCurrentY(), inputGantry.getItemId()));
 
         // calculate the time required to move far enough
         int inputCurrentXCoordinate = inputGantry.getCurrentX();
-        int xCoordinateToGoTo = minX - 60; // move three times the safety distance
-        double timeRequired = abs(inputCurrentXCoordinate - xCoordinateToGoTo)/inputGantry.getXSpeed();
+        int xCoordinateToGoTo = minX - safetyDistance;
 
-        updateClock(clock, timeRequired);
+        double timeRequired = abs(inputCurrentXCoordinate - xCoordinateToGoTo)/inputGantry.getXSpeed();
+        if( xCoordinateToGoTo < inputGantry.getXMin()){
+            inputGantry.setCurrentX(inputGantry.getXMin());
+        }else{
+            inputGantry.setCurrentX(xCoordinateToGoTo);
+        }
+
+
+        // no need to update the clock as this can be done in parallel
+        //updateClock(clock, timeRequired);
 
         // print new position
+        updateClock(clock, timeRequired);
+        performedActions.add(new Output(inputGantry.getId(), clock ,
+                inputGantry.getCurrentX(), inputGantry.getCurrentY(), inputGantry.getItemId()));
+
+    }
+
+    private void moveInputGantryToInput(Gantry inputGantry, Slot inputSlot, Job j){
+
+        int currentInputXCoordinate = inputGantry.getCurrentX();
+        int currentInputYCoordinate = inputGantry.getCurrentY();
+        double timeRequiredX = abs(currentInputXCoordinate - inputSlot.getCenterX()) / inputGantry.getXSpeed();
+        double timeRequiredY = abs(currentInputYCoordinate - inputSlot.getCenterY()) / inputGantry.getYSpeed();
+        double timeRequired;
+        if(timeRequiredX > timeRequiredY) timeRequired = timeRequiredX;
+        else timeRequired = timeRequiredY;
+
+        // print current position for security
+        performedActions.add(new Output(inputGantry.getId(), clock ,
+                inputGantry.getCurrentX(), inputGantry.getCurrentY(), inputGantry.getItemId()));
+
+        // set new x and y coordinate
+        inputGantry.setCurrentX(inputSlot.getCenterX());
+        inputGantry.setCurrentY(inputSlot.getCenterY());
+
+        // no need to update the clock as this can be done in parallel
+        updateClock(clock, timeRequired);
+        performedActions.add(new Output(inputGantry.getId(), clock ,
+                inputGantry.getCurrentX(), inputGantry.getCurrentY(), inputGantry.getItemId()));
+
+        // pickup the item
+        inputGantry.setItemId(j.getItem().getId());
+        updateClock(clock, problem.getPickupPlaceDuration());
         performedActions.add(new Output(inputGantry.getId(), clock,
-                gantryInput.getCurrentX(), inputGantry.getCurrentY(), inputGantry.getItemId()));
+                inputGantry.getCurrentX(), inputGantry.getCurrentY(), inputGantry.getItemId()));
+    }
+
+    private void moveOutputGantry( Gantry outputGantry, Job inputJob){
+        int inputPlaceXCoordinate = inputJob.getPlace().getSlot().getCenterX();
+
+        // calculate time needed to move the output gantry
+        int currentOutputXCoordinate = outputGantry.getCurrentX();
+        double timeRequired = abs((inputPlaceXCoordinate + safetyDistance) - currentOutputXCoordinate)/outputGantry.getXSpeed();
+
+        // print current position
+        performedActions.add(new Output(outputGantry.getId(), clock ,
+                outputGantry.getCurrentX(), outputGantry.getCurrentY(), outputGantry.getItemId()));
+
+        // no need to update the clock as this can be done in parallel
+
+        gantryOutput.setCurrentX(inputPlaceXCoordinate + safetyDistance);
+
+        updateClock(clock, timeRequired);
+        performedActions.add(new Output(outputGantry.getId(), clock,
+                outputGantry.getCurrentX(), outputGantry.getCurrentY(), outputGantry.getItemId()));
 
     }
 
@@ -370,7 +514,7 @@ public class Solution {
                 gantry.setCurrentX(pickupXCoordinate);
 
                 // calculate the actual time required
-                double timeRequired = (outputXCoordinate - pickupXCoordinate)/gantry.getXSpeed();
+                double timeRequired = abs(outputXCoordinate - pickupXCoordinate)/gantry.getXSpeed();
 
 
                 // check whether we could reach the Y coordinate within this smaller time frame
@@ -385,17 +529,19 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(pickupYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock, timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         // as the y move can be done while the gantry is stationary x-wise, we can set the
                         // y coordinate and add the action to the output
-                        timeRequired = (outputYCoordinate - pickupYCoordinate )/ gantry.getYSpeed();
+                        timeRequired = abs(outputYCoordinate - pickupYCoordinate )/ gantry.getYSpeed();
                         gantry.setCurrentY(pickupYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock, timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
                 }else if(gantry.getCurrentY() < pickupYCoordinate){
@@ -405,20 +551,26 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(pickupYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock, timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         // as the y move can be done while the gantry is stationary x-wise, we can set the
                         // y coordinate and add the action to the output
-                        timeRequired = (outputYCoordinate + pickupYCoordinate )/ gantry.getYSpeed();
+                        timeRequired = abs(outputYCoordinate + pickupYCoordinate )/ gantry.getYSpeed();
                         gantry.setCurrentY(pickupYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock, timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
 
+                }else if( gantry.getCurrentY() == pickupYCoordinate){
+                    updateClock(clock, timeRequired);
+                    performedActions.add(new Output(gantry.getId(), clock,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
                 }
             }
             // We cannot reach this pickup slot within the time frame
@@ -436,15 +588,17 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(pickupYCoordinate);
-                        double timeRequired = (outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        //double timeRequired = abs(outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
+                        updateClock(clock, timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         gantry.setCurrentY(outputYCoordinate - outputGantryPossibleYMove);
-                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock, timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
                 }else if(gantry.getCurrentY() < pickupYCoordinate){
@@ -454,18 +608,24 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(pickupYCoordinate);
-                        double timeRequired = (outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        //double timeRequired = abs(outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
+                        updateClock(clock, timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         gantry.setCurrentY(outputYCoordinate + outputGantryPossibleYMove);
-                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock, timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
 
+                }else if( gantry.getCurrentY() == pickupYCoordinate){
+                    updateClock(clock, timeInterval);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
                 }
             }
         }
@@ -480,7 +640,7 @@ public class Solution {
                 gantry.setCurrentX(pickupXCoordinate);
 
                 // calculate the actual time required
-                double timeRequired = (pickupXCoordinate - outputXCoordinate)/gantry.getXSpeed();
+                double timeRequired = abs(pickupXCoordinate - outputXCoordinate)/gantry.getXSpeed();
 
 
                 // check whether we could reach the Y coordinate within this smaller time frame
@@ -495,17 +655,19 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(pickupYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         // as the y move can be done while the gantry is stationary x-wise, we can set the
                         // y coordinate and add the action to the output
-                        timeRequired = (outputYCoordinate - pickupYCoordinate )/ gantry.getYSpeed();
+                        timeRequired = abs(outputYCoordinate - pickupYCoordinate )/ gantry.getYSpeed();
                         gantry.setCurrentY(pickupYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
                 }else if(gantry.getCurrentY() < pickupYCoordinate){
@@ -515,25 +677,31 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(pickupYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         // as the y move can be done while the gantry is stationary x-wise, we can set the
                         // y coordinate and add the action to the output
-                        timeRequired = (outputYCoordinate + pickupYCoordinate )/ gantry.getYSpeed();
+                        timeRequired = abs(outputYCoordinate + pickupYCoordinate )/ gantry.getYSpeed();
                         gantry.setCurrentY(pickupYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
 
+                }else if( gantry.getCurrentY() == pickupYCoordinate){
+                    updateClock(clock,timeRequired);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
                 }
             }
             // We cannot reach this pickup slot within the time frame
-            else if(outputXCoordinate - pickupXCoordinate >= outputGantryPossibleXMove){
-                gantry.setCurrentX(outputXCoordinate - outputGantryPossibleXMove);
+            else if( pickupXCoordinate - outputXCoordinate >= outputGantryPossibleXMove){
+                gantry.setCurrentX(outputXCoordinate + outputGantryPossibleXMove);
 
                 // check if the Y coordinate can be reached
                 int outputYCoordinate = gantry.getCurrentY();
@@ -546,15 +714,17 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(pickupYCoordinate);
-                        double timeRequired = (outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        //double timeRequired = abs(outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         gantry.setCurrentY(outputYCoordinate - outputGantryPossibleYMove);
-                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
                 }else if(gantry.getCurrentY() < pickupYCoordinate){
@@ -564,15 +734,17 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(pickupYCoordinate);
-                        double timeRequired = (outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        //double timeRequired = abs(outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         gantry.setCurrentY(outputYCoordinate + outputGantryPossibleYMove);
-                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
 
@@ -594,15 +766,17 @@ public class Solution {
                     //set y coordinate
                     gantry.setCurrentY(pickupYCoordinate);
                     // calculate the actual time required to perform the move
-                    double timeRequired = (outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
-                    performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                            gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                    double timeRequired = abs(outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
+                    updateClock(clock,timeRequired);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                 }else{
                     // y coordinate of the pickup slot could not be reached within the new time interval
                     gantry.setCurrentY(outputYCoordinate - outputGantryPossibleYMove);
-                    performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                            gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                    updateClock(clock,timeInterval);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                 }
             }else if(gantry.getCurrentY() < pickupYCoordinate){
@@ -612,18 +786,24 @@ public class Solution {
                     //we can reach the pickup slot y coordinate within the new time interval
                     //set y coordinate
                     gantry.setCurrentY(pickupYCoordinate);
-                    double timeRequired = (outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
-                    performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                            gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                    double timeRequired = abs(outputYCoordinate - pickupYCoordinate)/gantry.getYSpeed();
+                    updateClock(clock,timeRequired);
+                    performedActions.add(new Output(gantry.getId(), clock,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                 }else{
                     // y coordinate of the pickup slot could not be reached within the new time interval
                     gantry.setCurrentY(outputYCoordinate + outputGantryPossibleYMove);
-                    performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                            gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                    updateClock(clock,timeInterval);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                 }
 
+            }else if( gantry.getCurrentY() == pickupYCoordinate){
+                updateClock(clock,timeInterval);
+                performedActions.add(new Output(gantry.getId(), clock ,
+                        gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
             }
         }
 
@@ -648,7 +828,7 @@ public class Solution {
                 gantry.setCurrentX(placeXCoordinate);
 
                 // calculate the actual time required
-                double timeRequired = (inputXCoordinate - placeXCoordinate)/gantry.getXSpeed();
+                double timeRequired = abs(inputXCoordinate - placeXCoordinate)/gantry.getXSpeed();
 
 
                 // check whether we could reach the Y coordinate within this smaller time frame
@@ -663,17 +843,19 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(placeYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         // as the y move can be done while the gantry is stationary x-wise, we can set the
                         // y coordinate and add the action to the output
-                        timeRequired = (outputYCoordinate - placeYCoordinate )/ gantry.getYSpeed();
+                        timeRequired = abs(outputYCoordinate - placeYCoordinate )/ gantry.getYSpeed();
                         gantry.setCurrentY(placeYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
                 }else if(gantry.getCurrentY() < placeYCoordinate){
@@ -683,20 +865,26 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(placeYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         // as the y move can be done while the gantry is stationary x-wise, we can set the
                         // y coordinate and add the action to the output
-                        timeRequired = (outputYCoordinate + placeYCoordinate )/ gantry.getYSpeed();
+                        timeRequired = abs(outputYCoordinate + placeYCoordinate )/ gantry.getYSpeed();
                         gantry.setCurrentY(placeYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
 
+                }else if( gantry.getCurrentY() == placeYCoordinate){
+                    updateClock(clock,timeRequired);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
                 }
             }
             // We cannot reach this pickup slot within the time frame
@@ -714,15 +902,17 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(placeYCoordinate);
-                        double timeRequired = (outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        //double timeRequired = abs(outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         gantry.setCurrentY(outputYCoordinate - outputGantryPossibleYMove);
-                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
                 }else if(gantry.getCurrentY() < placeYCoordinate){
@@ -732,18 +922,24 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(placeYCoordinate);
-                        double timeRequired = (outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        //double timeRequired = abs(outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         gantry.setCurrentY(outputYCoordinate + outputGantryPossibleYMove);
-                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
 
+                }else if( gantry.getCurrentY() == placeYCoordinate){
+                    updateClock(clock,timeInterval);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
                 }
             }
         }
@@ -758,7 +954,7 @@ public class Solution {
                 gantry.setCurrentX(placeXCoordinate);
 
                 // calculate the actual time required
-                double timeRequired = (placeXCoordinate - inputXCoordinate)/gantry.getXSpeed();
+                double timeRequired = abs(placeXCoordinate - inputXCoordinate)/gantry.getXSpeed();
 
 
                 // check whether we could reach the Y coordinate within this smaller time frame
@@ -773,17 +969,19 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(placeYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         // as the y move can be done while the gantry is stationary x-wise, we can set the
                         // y coordinate and add the action to the output
-                        timeRequired = (outputYCoordinate - placeYCoordinate )/ gantry.getYSpeed();
+                        timeRequired = abs(outputYCoordinate - placeYCoordinate )/ gantry.getYSpeed();
                         gantry.setCurrentY(placeYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
                 }else if(gantry.getCurrentY() < placeYCoordinate){
@@ -793,25 +991,31 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(placeYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         // as the y move can be done while the gantry is stationary x-wise, we can set the
                         // y coordinate and add the action to the output
-                        timeRequired = (outputYCoordinate + placeYCoordinate )/ gantry.getYSpeed();
+                        timeRequired = abs(outputYCoordinate + placeYCoordinate )/ gantry.getYSpeed();
                         gantry.setCurrentY(placeYCoordinate);
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeRequired);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
 
+                }else if( gantry.getCurrentY() == placeYCoordinate){
+                    updateClock(clock,timeRequired);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
                 }
             }
             // We cannot reach this pickup slot within the time frame
-            else if(inputXCoordinate - placeXCoordinate >= inputGantryPossibleXMove){
-                gantry.setCurrentX(inputXCoordinate - inputGantryPossibleXMove);
+            else if(placeXCoordinate - inputXCoordinate >= inputGantryPossibleXMove){
+                gantry.setCurrentX(inputXCoordinate + inputGantryPossibleXMove);
 
                 // check if the Y coordinate can be reached
                 int outputYCoordinate = gantry.getCurrentY();
@@ -824,15 +1028,17 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(placeYCoordinate);
-                        double timeRequired = (outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        //double timeRequired = abs(outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         gantry.setCurrentY(outputYCoordinate - outputGantryPossibleYMove);
-                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
                 }else if(gantry.getCurrentY() < placeYCoordinate){
@@ -842,18 +1048,24 @@ public class Solution {
                         //we can reach the pickup slot y coordinate within the new time interval
                         //set y coordinate
                         gantry.setCurrentY(placeYCoordinate);
-                        double timeRequired = (outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
-                        performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        //double timeRequired = abs(outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }else{
                         // y coordinate of the pickup slot could not be reached within the new time interval
                         gantry.setCurrentY(outputYCoordinate + outputGantryPossibleYMove);
-                        performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                                gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                        updateClock(clock,timeInterval);
+                        performedActions.add(new Output(gantry.getId(), clock ,
+                                gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                     }
 
+                }else if( gantry.getCurrentY() == placeYCoordinate){
+                    updateClock(clock,timeInterval);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
                 }
             }
         }
@@ -872,15 +1084,17 @@ public class Solution {
                     //set y coordinate
                     gantry.setCurrentY(placeYCoordinate);
                     // calculate the actual time required to perform the move
-                    double timeRequired = (outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
-                    performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                            gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                    double timeRequired = abs(outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
+                    updateClock(clock,timeRequired);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                 }else{
                     // y coordinate of the pickup slot could not be reached within the new time interval
                     gantry.setCurrentY(outputYCoordinate - outputGantryPossibleYMove);
-                    performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                            gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                    updateClock(clock,timeInterval);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                 }
             }else if(gantry.getCurrentY() < placeYCoordinate){
@@ -890,18 +1104,24 @@ public class Solution {
                     //we can reach the pickup slot y coordinate within the new time interval
                     //set y coordinate
                     gantry.setCurrentY(placeYCoordinate);
-                    double timeRequired = (outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
-                    performedActions.add(new Output(gantry.getId(), clock + timeRequired,
-                            gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                    double timeRequired = abs(outputYCoordinate - placeYCoordinate)/gantry.getYSpeed();
+                    updateClock(clock,timeRequired);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                 }else{
                     // y coordinate of the pickup slot could not be reached within the new time interval
                     gantry.setCurrentY(outputYCoordinate + outputGantryPossibleYMove);
-                    performedActions.add(new Output(gantry.getId(), clock + timeInterval,
-                            gantryInput.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
+                    updateClock(clock,timeInterval);
+                    performedActions.add(new Output(gantry.getId(), clock ,
+                            gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
 
                 }
 
+            }else if( gantry.getCurrentY() == placeYCoordinate){
+                updateClock(clock,timeInterval);
+                performedActions.add(new Output(gantry.getId(), clock ,
+                        gantry.getCurrentX(), gantry.getCurrentY(), gantry.getItemId()));
             }
         }
     }
@@ -914,21 +1134,26 @@ public class Solution {
      */
     private void executeMoveJob(Slot toFillSlot, Job j){
 
-        //calculate delivery time (moving from input slot to free slot
-        timeToAdd = calculateGantryMoveTime(toFillSlot, gantryInput);
-        updateClock(clock, timeToAdd);
+        // pickup the item
+        gantryOutput.setItemId(j.getItem().getId());
+        updateClock(clock, problem.getPickupPlaceDuration());
+        performedActions.add(new Output(gantryOutput.getId(), clock,
+                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), j.getItem().getId()));
 
+        //calculate delivery time (moving from input slot to free slot
+        timeToAdd = calculateGantryMoveTime(toFillSlot, gantryOutput);
+        updateClock(clock, timeToAdd);
         //set new gantry coordinates
-        gantrySetCoordinates(gantryInput, j.getItem().getSlot());
+        gantrySetCoordinates(gantryOutput, j.getItem().getSlot());
         //new references between slot and item are both ways, so we can reference the slot via the item
 
         //action performed; adding to output
-        performedActions.add(new Output(gantryInput.getId(), clock,
-                gantryInput.getCurrentX(), gantryInput.getCurrentY(), j.getItem().getId()));
+        performedActions.add(new Output(gantryOutput.getId(), clock,
+                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), j.getItem().getId()));
         updateClock(clock, problem.getPickupPlaceDuration());
-
-        performedActions.add(new Output(gantryInput.getId(), clock,
-                gantryInput.getCurrentX(), gantryInput.getCurrentY(), -1));
+        gantryOutput.setItemId(-1);
+        performedActions.add(new Output(gantryOutput.getId(), clock,
+                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), -1));
 
     }
 
@@ -970,13 +1195,18 @@ public class Solution {
 
         }
 
-        //Every move can be seen as an input job but with a different start slot.
-        //performInputStacked(new Job(s.getId(), problem.getItems().get(s.getItem().getId()), s, null));
-        s.setItem(null);
+        if(s.getZ() != pickupLevel){
+
+            //Every move can be seen as an input job but with a different start slot.
+            performInputStacked(new Job(s.getId(), problem.getItems().get(s.getItem().getId()), s, null));
+            s.setItem(null);
+        }
+
 
     }
 
     public void performInputCrossed(Job j){
+
 
         // move the output gantry in place
 
@@ -985,8 +1215,14 @@ public class Solution {
                 gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
 
         int outputXCoordinate = gantryOutput.getCurrentX();
-        double timeRequired = abs(outputXCoordinate - j.getItem().getSlot().getCenterX())/gantryInput.getXSpeed();
+        int outputYCoordinate = gantryOutput.getCurrentY();
+        double timeRequired =  0;
+        double timeRequiredX = abs(outputXCoordinate - j.getItem().getSlot().getCenterX())/gantryOutput.getXSpeed();
+        double timeRequiredY = abs(outputYCoordinate - j.getItem().getSlot().getCenterY())/gantryOutput.getYSpeed();
+        if(timeRequiredX > timeRequiredY) timeRequired = timeRequiredX;
+        else timeRequired = timeRequiredY;
         gantryOutput.setCurrentX(j.getItem().getSlot().getCenterX());
+        gantryOutput.setCurrentY(j.getItem().getSlot().getCenterY());
         // update the clock
         updateClock(clock, timeRequired);
         performedActions.add(new Output(gantryOutput.getId(), clock ,
@@ -1032,32 +1268,115 @@ public class Solution {
         }
 
         // now that we have a free slot, check whether the input crane is in the way
-        if(!checkSafetyDistance(gantryInput, freeSlotTemp)){
+        if(gantryInput.getCurrentX() > freeSlotTemp.getCenterX() || !checkSafetyDistance(gantryInput, freeSlotTemp)){
             //if false, move input gantry as far as needed
 
             // print out current input gantry coordinates for safety
             performedActions.add(new Output(gantryInput.getId(), clock,
                     gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
-            if(freeSlotTemp.getCenterX() > gantryInput.getCurrentX()){
+            /*if(freeSlotTemp.getCenterX() > gantryInput.getCurrentX()){
                 // we have to move the gantry to the left
                 int inputXCoordinate = gantryInput.getCurrentX();
-                timeRequired = (inputXCoordinate - (inputXCoordinate - 20))/gantryInput.getXSpeed();
+                timeRequired = abs(inputXCoordinate - (inputXCoordinate - 20))/gantryInput.getXSpeed();
                 updateClock(clock, timeRequired);
                 performedActions.add(new Output(gantryInput.getId(), clock ,
                         gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
             }else if (freeSlotTemp.getCenterX() < gantryInput.getCurrentX()){
                 // we have to move the gantry to the right
                 int inputXCoordinate = gantryInput.getCurrentX();
-                timeRequired = ((inputXCoordinate + 20) - inputXCoordinate)/gantryInput.getXSpeed();
+                timeRequired = abs((inputXCoordinate + 20) - inputXCoordinate)/gantryInput.getXSpeed();
                 updateClock(clock, timeRequired);
                 performedActions.add(new Output(gantryInput.getId(), clock ,
                         gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
-            }
+            }*/
+            int inputXCoordinate = gantryInput.getCurrentX();
+            timeRequired = abs(inputXCoordinate - (freeSlotTemp.getCenterX() - 20))/gantryInput.getXSpeed();
+            gantryInput.setCurrentX(freeSlotTemp.getCenterX() - 20);
+            updateClock(clock, timeRequired);
+            performedActions.add(new Output(gantryInput.getId(), clock ,
+                    gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
         }
 
        // input gantry is moved, assign the slot to the item and vice versa
         freeSlotTemp.setItem(j.getItem());  //add item to slot
         j.getItem().setSlot(freeSlotTemp);  //add slot to item
+
+        //Execute the move from the pickup location to the place location
+        executeMoveJob(freeSlotTemp,j);
+
+    }
+
+    public void performInputStacked(Job j){
+
+        if(j.getItem().getId() == 1885)
+            System.out.println();
+        // move the output gantry in place
+
+        // print out previous coordinates
+        performedActions.add(new Output(gantryOutput.getId(), clock,
+                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
+
+        int outputXCoordinate = gantryOutput.getCurrentX();
+        int outputYCoordinate = gantryOutput.getCurrentY();
+        double timeRequired =  0;
+        double timeRequiredX = abs(outputXCoordinate - j.getItem().getSlot().getCenterX())/gantryOutput.getXSpeed();
+        double timeRequiredY = abs(outputYCoordinate - j.getItem().getSlot().getCenterY())/gantryOutput.getYSpeed();
+        if(timeRequiredX > timeRequiredY) timeRequired = timeRequiredX;
+        else timeRequired = timeRequiredY;
+        gantryOutput.setCurrentX(j.getItem().getSlot().getCenterX());
+        gantryOutput.setCurrentY(j.getItem().getSlot().getCenterY());
+        // update the clock
+        updateClock(clock, timeRequired);
+        performedActions.add(new Output(gantryOutput.getId(), clock ,
+                gantryOutput.getCurrentX(), gantryOutput.getCurrentY(), gantryOutput.getItemId()));
+
+        //Get free slot
+        Slot freeSlotTemp;
+
+        //Variables needed for range calculation
+        int minX;
+        int maxX;
+
+        //Initiate loop to find a correct slot
+        while (true) {
+
+            //Get slot from the queue
+            freeSlotTemp = freeSlots.getFreeSlots().remove();
+
+            //Check if freeSlotTemp is not within the range
+            if(freeSlotTemp.getCenterX() != j.getPickup().getSlot().getCenterX()){
+                //Check if the slot has two filled underlying slots.
+                if(checkUnderneathCrossed(freeSlotTemp))
+                    break;
+            }
+
+            //If slot is not feasible, add to the queue again and rerun the loop
+            freeSlots.addSlot(freeSlotTemp);
+
+            System.out.println("Lus lus");
+        }
+
+        // now that we have a free slot, check whether the input crane is in the way
+        if(gantryInput.getCurrentX() > freeSlotTemp.getCenterX() || !checkSafetyDistance(gantryInput, freeSlotTemp)){
+            //if false, move input gantry as far as needed
+
+            // print out current input gantry coordinates for safety
+            performedActions.add(new Output(gantryInput.getId(), clock,
+                    gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
+
+            int inputXCoordinate = gantryInput.getCurrentX();
+            timeRequired = abs(inputXCoordinate - (freeSlotTemp.getCenterX() - 20))/gantryInput.getXSpeed();
+            gantryInput.setCurrentX(freeSlotTemp.getCenterX() - 20);
+            updateClock(clock, timeRequired);
+            performedActions.add(new Output(gantryInput.getId(), clock ,
+                    gantryInput.getCurrentX(), gantryInput.getCurrentY(), gantryInput.getItemId()));
+        }
+
+        // input gantry is moved, assign the slot to the item and vice versa
+        freeSlotTemp.setItem(j.getItem());  //add item to slot
+        j.getItem().setSlot(freeSlotTemp);  //add slot to item
+
+        j.getPickup().getSlot().setItem(null);
 
         //Execute the move from the pickup location to the place location
         executeMoveJob(freeSlotTemp,j);
