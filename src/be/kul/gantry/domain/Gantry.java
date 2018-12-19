@@ -16,10 +16,7 @@ public class Gantry {
     private int currentY;
     private int itemId;
 
-    public Gantry(int id,
-                  int xMin, int xMax,
-                  int startX, int startY,
-                  double xSpeed, double ySpeed) {
+    public Gantry(int id, int xMin, int xMax, int startX, int startY, double xSpeed, double ySpeed) {
         this.id = id;
         this.xMin = xMin;
         this.xMax = xMax;
