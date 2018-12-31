@@ -302,7 +302,7 @@ public class Solution_Double {
                     && outputJobCount == problem.getOutputJobSequence().size())
                 break;
 
-            updateClock(clock, timeInterval);
+            //updateClock(clock, timeInterval);
         }
     }
 
