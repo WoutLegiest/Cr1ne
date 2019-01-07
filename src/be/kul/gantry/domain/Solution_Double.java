@@ -120,8 +120,7 @@ public class Solution_Double {
                     // set the pickup slot in the job
                     outputJob.getPickup().setSlot(outputJob.getItem().getSlot());
 
-                    // set the pickup level
-                    pickupLevel = outputJob.getItem().getSlot().getZ();
+
 
                     // check for feasible move
                     boolean feasibleMove = checkIfOutputGantryMoveIsFeasibleForPickup(gantryOutput,gantryInput,outputJob);
@@ -137,12 +136,19 @@ public class Solution_Double {
                     // if the gantry is directly above the slot it has to pickup, check for possible dig out and give absolute priority
                     if(gantryOutput.getCurrentX() == outputJob.getItem().getSlot().getCenterX() &&
                             gantryOutput.getCurrentY() == outputJob.getItem().getSlot().getCenterY()){
+                        // set the pickup level
+
+                        if(outputJob.getItem().getId() == 3284)
+                            System.out.println();
+                        pickupLevel = outputJob.getItem().getSlot().getZ();
                         if(crossed){
                             // if necessary move input gantry out of the way
                             digSlotOutCrossed(outputJob.getItem().getSlot());
                         }else
                             digSlotOutStacked(outputJob.getItem().getSlot());
 
+                        if(outputJob.getItem().getId() == 3284)
+                            System.out.println();
                         // get clock value of the latest move
                         clock = performedActions.get(performedActions.size() - 1).getTimeStamp();
                         // now move the item to the output slot
@@ -177,7 +183,9 @@ public class Solution_Double {
 
                         //add the item
                         gantryOutput.setItemId(outputJob.getItem().getId());
+
                         outputJob.getPickup().getSlot().setItem(null);
+
 
                         updateClock(clock, problem.getPickupPlaceDuration());
                         performedActions.add(new Output(gantryOutput.getId(), clock ,
@@ -250,22 +258,45 @@ public class Solution_Double {
                                 break;
                         }
                     }
-                    freeSlotTemp.setItem(inputJob.getItem());  //add item to slot
-
+                    //freeSlotTemp.setItem(inputJob.getItem());  //add item to slot
+                    //inputJob.getItem().setSlot(freeSlotTemp);
                     inputJob.getPlace().setSlot(freeSlotTemp); // add the free slot to the job
                 }
+
+                if(crossed)
+                    if(!checkUnderneathCrossed(inputJob.getPlace().getSlot())){
+                        //Get free slot when the input crane is above the input slot
+                        Slot freeSlotTemp;
+                        while (true) {
+                            //Get slot from the queue
+                            freeSlotTemp = freeSlots.getFreeSlots().remove();
+
+                            if (crossed) {
+                                //Check if the slot has two filled underlying slots.
+                                if (checkUnderneathCrossed(freeSlotTemp))
+                                    break;
+                            } else {
+                                // Check if the slot has one filled underlying slot
+                                if (checkUnderneathStacked(freeSlotTemp))
+                                    break;
+                            }
+                        }
+                        //freeSlotTemp.setItem(inputJob.getItem());  //add item to slot
+                        //inputJob.getItem().setSlot(freeSlotTemp);
+                        inputJob.getPlace().setSlot(freeSlotTemp); // add the free slot to the job
+                    }
 
                 // check whether the output job item is assigned to a slot, if not it is in the input queue and this queue should proceed, which means moving the output gantry if necessary
                 boolean outputNotReady = outputJob.getItem().getSlot() == null;
 
                 boolean feasibleMove = checkIfInputGantryMoveIsFeasible(gantryOutput,gantryInput, inputJob);
-
+                if(inputJob.getItem().getId() == 3284 && clock > 51000)
+                    System.out.println();
                 if(!feasibleMove && outputNotReady){
                     moveOutputGantry(gantryOutput,inputJob);
                     executeInputGantryMove(gantryInput, inputJob);
                 }else if(feasibleMove)
                     executeInputGantryMove(gantryInput, inputJob);
-
 
                 if(gantryInput.getCurrentX() == inputJob.getPlace().getSlot().getCenterX()
                         && gantryInput.getCurrentY() == inputJob.getPlace().getSlot().getCenterY()){
@@ -1271,6 +1302,10 @@ public class Solution_Double {
         int outputXCoordinate = gantryOutput.getCurrentX();
         int outputYCoordinate = gantryOutput.getCurrentY();
         double timeRequired =  0;
+        /*if(j.getItem().getSlot() == null)
+            j.getItem().setSlot(j.getPickup().getSlot());*/
+        if(j.getItem().getId() == 3284)
+            System.out.println();
         double timeRequiredX = abs(outputXCoordinate - j.getItem().getSlot().getCenterX())/gantryOutput.getXSpeed();
         double timeRequiredY = abs(outputYCoordinate - j.getItem().getSlot().getCenterY())/gantryOutput.getYSpeed();
 
